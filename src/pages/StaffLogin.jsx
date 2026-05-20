@@ -1,19 +1,29 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Lock, User, ArrowLeft, ShieldCheck } from "lucide-react";
+import { signIn } from "../lib/auth";
 
 export default function StaffLogin() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username || !password) return;
+    setError("");
     setLoading(true);
-    setTimeout(() => navigate("/admin/panel"), 1000);
+    try {
+      const { user } = await signIn(email, password);
+      const isStaff = user.email?.endsWith("@clinica-cotten.com");
+      navigate(isStaff ? "/admin/panel" : "/paciente/inicio");
+    } catch (err) {
+      console.error('[StaffLogin] signIn error:', err)
+      setError("Credenciales incorrectas. Por favor, inténtelo de nuevo.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -54,10 +64,10 @@ export default function StaffLogin() {
               <div className="relative">
                 <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  placeholder="usuario.clinica"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="correo@clinica.com"
                   className="w-full pl-11 pr-4 py-3.5 rounded-xl text-sm text-white placeholder-white/20 outline-none"
                   style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
                   required
@@ -83,6 +93,10 @@ export default function StaffLogin() {
                 </button>
               </div>
             </div>
+
+            {error && (
+              <p className="text-sm text-center" style={{ color: "#f87171" }}>{error}</p>
+            )}
 
             <button
               type="submit"

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, RequirePatient, RequireStaff } from "./contexts/AuthContext";
 import Landing from "./pages/Landing";
 import PatientLogin from "./pages/PatientLogin";
 import StaffLogin from "./pages/StaffLogin";
@@ -8,14 +9,16 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/acceso-paciente" element={<PatientLogin />} />
-        <Route path="/acceso-personal" element={<StaffLogin />} />
-        <Route path="/paciente/*" element={<PatientDashboard />} />
-        <Route path="/admin/*" element={<AdminDashboard />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/acceso-paciente" element={<PatientLogin />} />
+          <Route path="/acceso-personal" element={<StaffLogin />} />
+          <Route path="/paciente/*" element={<RequirePatient><PatientDashboard /></RequirePatient>} />
+          <Route path="/admin/*" element={<RequireStaff><AdminDashboard /></RequireStaff>} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail, ArrowLeft } from "lucide-react";
+import { signIn } from "../lib/auth";
 
 export default function PatientLogin() {
   const navigate = useNavigate();
@@ -8,12 +9,21 @@ export default function PatientLogin() {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) return;
+    setError("");
     setLoading(true);
-    setTimeout(() => navigate("/paciente/inicio"), 1000);
+    try {
+      const { user } = await signIn(email, password);
+      const isStaff = user.email?.endsWith("@clinica-cotten.com");
+      navigate(isStaff ? "/admin/panel" : "/paciente/inicio");
+    } catch (err) {
+      console.error('[PatientLogin] signIn error:', err)
+      setError("Credenciales incorrectas. Por favor, inténtelo de nuevo.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -110,6 +120,10 @@ export default function PatientLogin() {
               </label>
               <a href="#" className="text-xs" style={{ color: "#c9a96e" }}>¿Olvidó su contraseña?</a>
             </div>
+
+            {error && (
+              <p className="text-sm text-center" style={{ color: "#f87171" }}>{error}</p>
+            )}
 
             <button
               type="submit"
