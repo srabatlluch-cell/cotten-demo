@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: #f8f7f4;
+  margin: 0;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+.scrollbar-thin::-webkit-scrollbar        { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track  { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb  { background: rgba(201,169,110,0.4); border-radius: 2px; }
+
+/* ── Hero load animations ───────────────────────────────────── */
+@keyframes cc-hero-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.cc-hero-el {
+  animation: cc-hero-up 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+.cc-d1 { animation-delay: 0.10s; }
+.cc-d2 { animation-delay: 0.30s; }
+.cc-d3 { animation-delay: 0.50s; }
+.cc-d4 { animation-delay: 0.72s; }
+.cc-d5 { animation-delay: 0.92s; }
+.cc-d6 { animation-delay: 1.10s; }
+
+/* ── Hero badge float-in (from right) ────────────────────────── */
+@keyframes cc-badge-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+.cc-badge-in {
+  animation: cc-badge-in 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation-delay: 1.3s;
+}
+
+/* ── Scroll-cue gentle float ─────────────────────────────────── */
+@keyframes cc-float {
+  0%, 100% { transform: translateX(-50%) translateY(0);   }
+  50%       { transform: translateX(-50%) translateY(7px); }
+}
+.cc-float {
+  animation: cc-float 2.8s ease-in-out infinite;
+}
+
+/* ── Acceso Paciente button gold pulse ──────────────────────── */
+@keyframes cc-pulse-gold {
+  0%, 100% {
+    box-shadow: 0 8px 30px rgba(201,169,110,0.38);
+  }
+  50% {
+    box-shadow: 0 10px 50px rgba(201,169,110,0.72),
+                0 0 0 10px rgba(201,169,110,0.10);
+  }
+}
+.cc-btn-pulse {
+  animation: cc-pulse-gold 3.6s ease-in-out infinite;
+  animation-delay: 2.2s;
+}
