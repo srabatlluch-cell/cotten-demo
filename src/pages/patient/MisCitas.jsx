@@ -1,37 +1,26 @@
 import { useState, useEffect } from "react";
-import { Clock, User, MapPin, Plus, X, Check, XCircle, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { Clock, User, MapPin, Plus, X, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const STATUS_MAP = {
-  scheduled: {
-    label: "Programada",  badgeBg: "#fffbeb", badgeColor: "#b45309",
-    Icon: Clock,
-    cardBg: "white",      cardOpacity: 1,     strikethrough: false, diagonal: false,
-  },
-  confirmed: {
-    label: "Confirmada",  badgeBg: "#dcfce7", badgeColor: "#15803d",
-    Icon: CheckCircle2,
-    cardBg: "white",      cardOpacity: 1,     strikethrough: false, diagonal: false,
-  },
-  completed: {
-    label: "Completada",  badgeBg: "#f3f4f6", badgeColor: "#6b7280",
-    Icon: Check,
-    cardBg: "#fafafa",    cardOpacity: 0.72,  strikethrough: false, diagonal: false,
-  },
-  cancelled: {
-    label: "Cancelada",   badgeBg: "#fee2e2", badgeColor: "#dc2626",
-    Icon: XCircle,
-    cardBg: "#fff5f5",    cardOpacity: 1,     strikethrough: true,  diagonal: true,
-  },
-  no_show: {
-    label: "No presentado", badgeBg: "#fff7ed", badgeColor: "#c2410c",
-    Icon: XCircle,
-    cardBg: "#fffaf7",    cardOpacity: 0.72,  strikethrough: false, diagonal: false,
-  },
-};
+function getStatusStyle(status) {
+  switch (status) {
+    case "confirmed":
+      return { badgeClass: "bg-green-100 text-green-700",  icon: "✓", label: "Confirmada",    cardClass: "",            diagonal: false };
+    case "scheduled":
+      return { badgeClass: "bg-amber-100 text-amber-700",  icon: "🕐", label: "Programada",   cardClass: "",            diagonal: false };
+    case "completed":
+      return { badgeClass: "bg-gray-100 text-gray-500",    icon: "✓", label: "Completada",    cardClass: "opacity-50",  diagonal: false };
+    case "cancelled":
+      return { badgeClass: "bg-red-100 text-red-700",      icon: "✕", label: "Cancelada",     cardClass: "opacity-60",  diagonal: true  };
+    case "no_show":
+      return { badgeClass: "bg-orange-100 text-orange-700",icon: "✗", label: "No presentado", cardClass: "opacity-60",  diagonal: false };
+    default:
+      return { badgeClass: "bg-amber-100 text-amber-700",  icon: "🕐", label: "Programada",   cardClass: "",            diagonal: false };
+  }
+}
 
 const TREATMENT_OPTIONS = [
   "Consulta inicial",
@@ -66,26 +55,22 @@ async function fetchAppointments() {
 // ─── sub-components ───────────────────────────────────────────────────────────
 
 function AppointmentCard({ appt }) {
-  const s = STATUS_MAP[appt.appt_status] ?? STATUS_MAP.scheduled;
-  const { Icon } = s;
-  const dateObj = new Date(appt.date + "T12:00");
+  const s       = getStatusStyle(appt.appt_status);
+  // Parse date in local time — avoids UTC midnight shift
+  const [y, mo, d] = (appt.date ?? "").split("-").map(Number);
+  const dateObj = new Date(y, mo - 1, d);
 
   return (
     <div
-      className="rounded-2xl p-5 relative overflow-hidden"
-      style={{
-        border:      `1px solid ${s.diagonal ? "#fecaca" : "#e5e0d8"}`,
-        background:  s.cardBg,
-        opacity:     s.cardOpacity,
-        transition:  "opacity 0.2s",
-      }}
+      className={`rounded-2xl p-5 relative overflow-hidden bg-white ${s.cardClass}`}
+      style={{ border: `1px solid ${s.diagonal ? "#fecaca" : "#e5e0d8"}` }}
     >
-      {/* Cancelled diagonal stamp line */}
+      {/* Cancelled diagonal stamp */}
       {s.diagonal && (
         <div
           aria-hidden
           style={{
-            position:   "absolute", inset: 0,
+            position: "absolute", inset: 0,
             background: "linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(220,38,38,0.18) calc(50% - 0.5px), rgba(220,38,38,0.18) calc(50% + 0.5px), transparent calc(50% + 0.5px))",
             pointerEvents: "none",
           }}
@@ -110,11 +95,8 @@ function AppointmentCard({ appt }) {
           {/* Info */}
           <div>
             <p
-              className="font-medium text-sm"
-              style={{
-                color:          s.diagonal ? "#9ca3af" : "#1a2744",
-                textDecoration: s.strikethrough ? "line-through" : "none",
-              }}
+              className={`font-medium text-sm ${s.diagonal ? "line-through" : ""}`}
+              style={{ color: s.diagonal ? "#9ca3af" : "#1a2744" }}
             >
               {appt.treatment ?? "—"}
             </p>
@@ -140,11 +122,8 @@ function AppointmentCard({ appt }) {
         </div>
 
         {/* Status badge */}
-        <span
-          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full flex-shrink-0 font-medium"
-          style={{ background: s.badgeBg, color: s.badgeColor }}
-        >
-          <Icon size={11} strokeWidth={2.5} />
+        <span className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full flex-shrink-0 font-semibold ${s.badgeClass}`}>
+          <span aria-hidden>{s.icon}</span>
           {s.label}
         </span>
       </div>

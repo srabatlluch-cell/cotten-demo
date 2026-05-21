@@ -21,14 +21,22 @@ const STATUS_MAP = {
   no_show:   { label: "No presentado", bg: "#fff7ed", color: "#c2410c" },
 };
 
-// Status left-border + card treatment for calendar blocks
-const STATUS_CARD = {
-  scheduled: { border: "#f59e0b", opacity: 1,    strike: false },
-  confirmed: { border: "#22c55e", opacity: 1,    strike: false },
-  completed: { border: "#9ca3af", opacity: 0.55, strike: false },
-  cancelled: { border: "#ef4444", opacity: 0.55, strike: true  },
-  no_show:   { border: "#f97316", opacity: 0.55, strike: false },
-};
+function getStatusStyle(status) {
+  switch (status) {
+    case "confirmed":
+      return { badgeClass: "bg-green-100 text-green-700",   icon: "✓", label: "Confirmada",    cardClass: "",           borderColor: "#22c55e", opacity: 1,    strike: false };
+    case "scheduled":
+      return { badgeClass: "bg-amber-100 text-amber-700",   icon: "🕐", label: "Programada",   cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
+    case "completed":
+      return { badgeClass: "bg-gray-100 text-gray-500",     icon: "✓", label: "Completada",    cardClass: "opacity-50", borderColor: "#9ca3af", opacity: 0.55, strike: false };
+    case "cancelled":
+      return { badgeClass: "bg-red-100 text-red-700",       icon: "✕", label: "Cancelada",     cardClass: "opacity-60", borderColor: "#ef4444", opacity: 0.55, strike: true  };
+    case "no_show":
+      return { badgeClass: "bg-orange-100 text-orange-700", icon: "✗", label: "No presentado", cardClass: "opacity-60", borderColor: "#f97316", opacity: 0.55, strike: false };
+    default:
+      return { badgeClass: "bg-amber-100 text-amber-700",   icon: "🕐", label: "Programada",   cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
+  }
+}
 
 const TIME_SLOTS = [];
 for (let h = 8; h < 20; h++) {
@@ -59,12 +67,17 @@ function getWeekDays(startDate) {
   });
 }
 
+// Use local year/month/day — toISOString() converts to UTC and shifts dates
+// in timezones east of UTC (e.g. UTC+2 midnight = previous day in UTC).
 function toDateStr(d) {
-  return d.toISOString().split("T")[0];
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
 }
 
 function todayStr() {
-  return new Date().toISOString().split("T")[0];
+  return toDateStr(new Date());
 }
 
 // ─── data helpers ─────────────────────────────────────────────────────────────
@@ -580,27 +593,23 @@ export default function Agenda() {
                 <div className="space-y-1.5">
                   {dayAppts.map(appt => {
                     const c  = doctorColor(appt.doctor_id);
-                    const sc = STATUS_CARD[appt.appt_status] ?? STATUS_CARD.scheduled;
+                    const sc = getStatusStyle(appt.appt_status);
                     return (
                       <div
                         key={appt.id}
                         onClick={() => openEdit(appt)}
-                        className="rounded-lg p-2 text-xs cursor-pointer transition-opacity hover:opacity-70"
+                        className={`rounded-lg p-2 text-xs cursor-pointer transition-opacity hover:opacity-70 ${sc.cardClass}`}
                         style={{
-                          background:  sc.opacity < 1 ? "#f9fafb" : c.light,
-                          borderLeft:  `3px solid ${sc.border}`,
-                          opacity:     sc.opacity,
+                          background: sc.opacity < 1 ? "#f9fafb" : c.light,
+                          borderLeft: `3px solid ${sc.borderColor}`,
                         }}
                       >
-                        <p className="font-semibold" style={{ color: sc.border }}>
+                        <p className="font-semibold" style={{ color: sc.borderColor }}>
                           {appt.appointment_time?.slice(0, 5)}
                         </p>
                         <p
-                          className="truncate mt-0.5 font-medium"
-                          style={{
-                            color:          "#374151",
-                            textDecoration: sc.strike ? "line-through" : "none",
-                          }}
+                          className={`truncate mt-0.5 font-medium ${sc.strike ? "line-through" : ""}`}
+                          style={{ color: "#374151" }}
                         >
                           {appt.patient_name?.split(" ")[0] ?? "—"}
                         </p>
