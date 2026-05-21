@@ -14,11 +14,20 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_MAP = {
-  scheduled: { label: "Programada",    bg: "#fff8e1", color: "#f57f17" },
-  confirmed: { label: "Confirmada",    bg: "#e8f5e9", color: "#2e7d32" },
+  scheduled: { label: "Programada",    bg: "#fffbeb", color: "#b45309" },
+  confirmed: { label: "Confirmada",    bg: "#dcfce7", color: "#15803d" },
   completed: { label: "Completada",    bg: "#f3f4f6", color: "#6b7280" },
-  cancelled: { label: "Cancelada",     bg: "#fef2f2", color: "#dc2626" },
-  no_show:   { label: "No presentado", bg: "#fef2f2", color: "#dc2626" },
+  cancelled: { label: "Cancelada",     bg: "#fee2e2", color: "#dc2626" },
+  no_show:   { label: "No presentado", bg: "#fff7ed", color: "#c2410c" },
+};
+
+// Status left-border + card treatment for calendar blocks
+const STATUS_CARD = {
+  scheduled: { border: "#f59e0b", opacity: 1,    strike: false },
+  confirmed: { border: "#22c55e", opacity: 1,    strike: false },
+  completed: { border: "#9ca3af", opacity: 0.55, strike: false },
+  cancelled: { border: "#ef4444", opacity: 0.55, strike: true  },
+  no_show:   { border: "#f97316", opacity: 0.55, strike: false },
 };
 
 const TIME_SLOTS = [];
@@ -570,18 +579,29 @@ export default function Agenda() {
                 {/* Appointment cards */}
                 <div className="space-y-1.5">
                   {dayAppts.map(appt => {
-                    const c = doctorColor(appt.doctor_id);
+                    const c  = doctorColor(appt.doctor_id);
+                    const sc = STATUS_CARD[appt.appt_status] ?? STATUS_CARD.scheduled;
                     return (
                       <div
                         key={appt.id}
                         onClick={() => openEdit(appt)}
-                        className="rounded-lg p-2 text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                        style={{ background: c.light, borderLeft: `3px solid ${c.bg}` }}
+                        className="rounded-lg p-2 text-xs cursor-pointer transition-opacity hover:opacity-70"
+                        style={{
+                          background:  sc.opacity < 1 ? "#f9fafb" : c.light,
+                          borderLeft:  `3px solid ${sc.border}`,
+                          opacity:     sc.opacity,
+                        }}
                       >
-                        <p className="font-semibold" style={{ color: c.bg }}>
+                        <p className="font-semibold" style={{ color: sc.border }}>
                           {appt.appointment_time?.slice(0, 5)}
                         </p>
-                        <p className="truncate mt-0.5 font-medium" style={{ color: "#374151" }}>
+                        <p
+                          className="truncate mt-0.5 font-medium"
+                          style={{
+                            color:          "#374151",
+                            textDecoration: sc.strike ? "line-through" : "none",
+                          }}
+                        >
                           {appt.patient_name?.split(" ")[0] ?? "—"}
                         </p>
                         <p className="truncate" style={{ color: "#9ca3af" }}>

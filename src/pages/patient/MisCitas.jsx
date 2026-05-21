@@ -1,16 +1,36 @@
 import { useState, useEffect } from "react";
-import { Calendar, Clock, User, MapPin, Plus, X, CheckCircle, Loader2, AlertCircle } from "lucide-react";
+import { Clock, User, MapPin, Plus, X, Check, XCircle, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
 const STATUS_MAP = {
-  scheduled:  { label: "Programada",     bg: "#fff8e1", color: "#f57f17" },
-  confirmed:  { label: "Confirmada",     bg: "#e8f5e9", color: "#2e7d32" },
-  completed:  { label: "Completada",     bg: "#f3f4f6", color: "#6b7280" },
-  cancelled:  { label: "Cancelada",      bg: "#fef2f2", color: "#dc2626" },
-  no_show:    { label: "No presentado",  bg: "#fef2f2", color: "#dc2626" },
+  scheduled: {
+    label: "Programada",  badgeBg: "#fffbeb", badgeColor: "#b45309",
+    Icon: Clock,
+    cardBg: "white",      cardOpacity: 1,     strikethrough: false, diagonal: false,
+  },
+  confirmed: {
+    label: "Confirmada",  badgeBg: "#dcfce7", badgeColor: "#15803d",
+    Icon: CheckCircle2,
+    cardBg: "white",      cardOpacity: 1,     strikethrough: false, diagonal: false,
+  },
+  completed: {
+    label: "Completada",  badgeBg: "#f3f4f6", badgeColor: "#6b7280",
+    Icon: Check,
+    cardBg: "#fafafa",    cardOpacity: 0.72,  strikethrough: false, diagonal: false,
+  },
+  cancelled: {
+    label: "Cancelada",   badgeBg: "#fee2e2", badgeColor: "#dc2626",
+    Icon: XCircle,
+    cardBg: "#fff5f5",    cardOpacity: 1,     strikethrough: true,  diagonal: true,
+  },
+  no_show: {
+    label: "No presentado", badgeBg: "#fff7ed", badgeColor: "#c2410c",
+    Icon: XCircle,
+    cardBg: "#fffaf7",    cardOpacity: 0.72,  strikethrough: false, diagonal: false,
+  },
 };
 
 const TREATMENT_OPTIONS = [
@@ -47,24 +67,55 @@ async function fetchAppointments() {
 
 function AppointmentCard({ appt }) {
   const s = STATUS_MAP[appt.appt_status] ?? STATUS_MAP.scheduled;
+  const { Icon } = s;
   const dateObj = new Date(appt.date + "T12:00");
+
   return (
-    <div className="bg-white rounded-2xl p-5" style={{ border: "1px solid #e5e0d8" }}>
-      <div className="flex items-start justify-between gap-4">
+    <div
+      className="rounded-2xl p-5 relative overflow-hidden"
+      style={{
+        border:      `1px solid ${s.diagonal ? "#fecaca" : "#e5e0d8"}`,
+        background:  s.cardBg,
+        opacity:     s.cardOpacity,
+        transition:  "opacity 0.2s",
+      }}
+    >
+      {/* Cancelled diagonal stamp line */}
+      {s.diagonal && (
+        <div
+          aria-hidden
+          style={{
+            position:   "absolute", inset: 0,
+            background: "linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(220,38,38,0.18) calc(50% - 0.5px), rgba(220,38,38,0.18) calc(50% + 0.5px), transparent calc(50% + 0.5px))",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+
+      <div className="flex items-start justify-between gap-4 relative">
         <div className="flex items-start gap-4">
+          {/* Date chip */}
           <div
             className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
-            style={{ background: "linear-gradient(135deg, #1a274412, #1a274420)" }}
+            style={{ background: s.diagonal ? "#fee2e210" : "linear-gradient(135deg, #1a274412, #1a274420)" }}
           >
-            <span className="text-xs font-bold" style={{ color: "#1a2744" }}>
+            <span className="text-xs font-bold" style={{ color: s.diagonal ? "#dc2626" : "#1a2744" }}>
               {dateObj.toLocaleDateString("es-ES", { day: "2-digit" })}
             </span>
-            <span className="text-xs uppercase" style={{ color: "#c9a96e" }}>
+            <span className="text-xs uppercase" style={{ color: s.diagonal ? "#f87171" : "#c9a96e" }}>
               {dateObj.toLocaleDateString("es-ES", { month: "short" })}
             </span>
           </div>
+
+          {/* Info */}
           <div>
-            <p className="font-medium text-sm" style={{ color: "#1a2744" }}>
+            <p
+              className="font-medium text-sm"
+              style={{
+                color:          s.diagonal ? "#9ca3af" : "#1a2744",
+                textDecoration: s.strikethrough ? "line-through" : "none",
+              }}
+            >
               {appt.treatment ?? "—"}
             </p>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
@@ -87,10 +138,13 @@ function AppointmentCard({ appt }) {
             </div>
           </div>
         </div>
+
+        {/* Status badge */}
         <span
-          className="text-xs px-3 py-1.5 rounded-full flex-shrink-0 font-medium"
-          style={{ background: s.bg, color: s.color }}
+          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full flex-shrink-0 font-medium"
+          style={{ background: s.badgeBg, color: s.badgeColor }}
         >
+          <Icon size={11} strokeWidth={2.5} />
           {s.label}
         </span>
       </div>
