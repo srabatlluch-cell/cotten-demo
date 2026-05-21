@@ -1,26 +1,8 @@
 import { useState, useEffect } from "react";
-import { Clock, User, MapPin, Plus, X, Loader2, AlertCircle } from "lucide-react";
+import { Clock, User, MapPin, Plus, X, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
-
-// ─── constants ────────────────────────────────────────────────────────────────
-
-function getStatusStyle(status) {
-  switch (status) {
-    case "confirmed":
-      return { badgeClass: "bg-green-100 text-green-700",  icon: "✓", label: "Confirmada",    cardClass: "",            diagonal: false };
-    case "scheduled":
-      return { badgeClass: "bg-amber-100 text-amber-700",  icon: "🕐", label: "Programada",   cardClass: "",            diagonal: false };
-    case "completed":
-      return { badgeClass: "bg-gray-100 text-gray-500",    icon: "✓", label: "Completada",    cardClass: "opacity-50",  diagonal: false };
-    case "cancelled":
-      return { badgeClass: "bg-red-100 text-red-700",      icon: "✕", label: "Cancelada",     cardClass: "opacity-60",  diagonal: true  };
-    case "no_show":
-      return { badgeClass: "bg-orange-100 text-orange-700",icon: "✗", label: "No presentado", cardClass: "opacity-60",  diagonal: false };
-    default:
-      return { badgeClass: "bg-amber-100 text-amber-700",  icon: "🕐", label: "Programada",   cardClass: "",            diagonal: false };
-  }
-}
+import { apptStatus } from "../../lib/statusStyles";
 
 const TREATMENT_OPTIONS = [
   "Consulta inicial",
@@ -54,19 +36,32 @@ async function fetchAppointments() {
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-function AppointmentCard({ appt }) {
-  const s       = getStatusStyle(appt.appt_status);
+function AppointmentCard({ appt, onUpdateStatus }) {
+  const s = apptStatus(appt.appt_status);
+  const [acting, setActing] = useState(null); // 'confirmed' | 'cancelled' | null
+
   // Parse date in local time — avoids UTC midnight shift
   const [y, mo, d] = (appt.date ?? "").split("-").map(Number);
   const dateObj = new Date(y, mo - 1, d);
 
+  async function handleAction(newStatus) {
+    setActing(newStatus);
+    try {
+      await onUpdateStatus(appt.id, newStatus);
+    } finally {
+      setActing(null);
+    }
+  }
+
+  const showActions = appt.appt_status === "scheduled" || appt.appt_status === "confirmed";
+
   return (
     <div
-      className={`rounded-2xl p-5 relative overflow-hidden bg-white ${s.cardClass}`}
-      style={{ border: `1px solid ${s.diagonal ? "#fecaca" : "#e5e0d8"}` }}
+      className="rounded-2xl relative overflow-hidden bg-white"
+      style={{ ...s.card, border: `1px solid ${s.strike ? "#fecaca" : "#e5e0d8"}` }}
     >
       {/* Cancelled diagonal stamp */}
-      {s.diagonal && (
+      {s.strike && (
         <div
           aria-hidden
           style={{
@@ -77,56 +72,98 @@ function AppointmentCard({ appt }) {
         />
       )}
 
-      <div className="flex items-start justify-between gap-4 relative">
-        <div className="flex items-start gap-4">
-          {/* Date chip */}
-          <div
-            className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
-            style={{ background: s.diagonal ? "#fee2e210" : "linear-gradient(135deg, #1a274412, #1a274420)" }}
-          >
-            <span className="text-xs font-bold" style={{ color: s.diagonal ? "#dc2626" : "#1a2744" }}>
-              {dateObj.toLocaleDateString("es-ES", { day: "2-digit" })}
-            </span>
-            <span className="text-xs uppercase" style={{ color: s.diagonal ? "#f87171" : "#c9a96e" }}>
-              {dateObj.toLocaleDateString("es-ES", { month: "short" })}
-            </span>
-          </div>
-
-          {/* Info */}
-          <div>
-            <p
-              className={`font-medium text-sm ${s.diagonal ? "line-through" : ""}`}
-              style={{ color: s.diagonal ? "#9ca3af" : "#1a2744" }}
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-4 relative">
+          <div className="flex items-start gap-4">
+            {/* Date chip */}
+            <div
+              className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+              style={{ background: s.strike ? "#fee2e210" : "linear-gradient(135deg, #1a274412, #1a274420)", borderLeft: `3px solid ${s.borderColor}` }}
             >
-              {appt.treatment ?? "—"}
-            </p>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-              <span className="flex items-center gap-1.5 text-xs" style={{ color: "#9ca3af" }}>
-                <Clock size={12} />
-                {appt.appointment_time?.slice(0, 5) ?? "—"}h
+              <span className="text-xs font-bold" style={{ color: s.strike ? "#dc2626" : "#1a2744" }}>
+                {dateObj.toLocaleDateString("es-ES", { day: "2-digit" })}
               </span>
-              {appt.doctor_name && (
+              <span className="text-xs uppercase" style={{ color: s.strike ? "#f87171" : "#c9a96e" }}>
+                {dateObj.toLocaleDateString("es-ES", { month: "short" })}
+              </span>
+            </div>
+
+            {/* Info */}
+            <div>
+              <p
+                className="font-medium text-sm"
+                style={{ color: s.dim ? "#9ca3af" : "#1a2744", textDecoration: s.strike ? "line-through" : "none" }}
+              >
+                {appt.treatment ?? "—"}
+              </p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                 <span className="flex items-center gap-1.5 text-xs" style={{ color: "#9ca3af" }}>
-                  <User size={12} />
-                  {appt.doctor_name}
+                  <Clock size={12} />
+                  {appt.appointment_time?.slice(0, 5) ?? "—"}h
                 </span>
-              )}
-              {appt.room && (
-                <span className="flex items-center gap-1.5 text-xs" style={{ color: "#9ca3af" }}>
-                  <MapPin size={12} />
-                  {appt.room}
-                </span>
-              )}
+                {appt.doctor_name && (
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color: "#9ca3af" }}>
+                    <User size={12} />
+                    {appt.doctor_name}
+                  </span>
+                )}
+                {appt.room && (
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color: "#9ca3af" }}>
+                    <MapPin size={12} />
+                    {appt.room}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Status badge */}
-        <span className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full flex-shrink-0 font-semibold ${s.badgeClass}`}>
-          <span aria-hidden>{s.icon}</span>
-          {s.label}
-        </span>
+          {/* Status badge */}
+          <span className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full flex-shrink-0 font-semibold" style={s.badge}>
+            {s.icon} {s.label}
+          </span>
+        </div>
       </div>
+
+      {/* Action buttons */}
+      {showActions && (
+        <div
+          className="px-5 pb-4 flex items-center gap-2 flex-wrap relative"
+          style={{ borderTop: "1px solid #f3f0ea", paddingTop: "12px" }}
+        >
+          {appt.appt_status === "scheduled" && (
+            <button
+              onClick={() => handleAction("confirmed")}
+              disabled={!!acting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ background: "#dcfce7", color: "#15803d" }}
+            >
+              {acting === "confirmed"
+                ? <Loader2 size={12} className="animate-spin" />
+                : <CheckCircle size={12} />}
+              Confirmar cita
+            </button>
+          )}
+
+          {appt.appt_status === "confirmed" && (
+            <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#15803d" }}>
+              <CheckCircle size={13} />
+              Ya confirmada
+            </span>
+          )}
+
+          <button
+            onClick={() => handleAction("cancelled")}
+            disabled={!!acting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:bg-red-50 disabled:opacity-50"
+            style={{ border: "1px solid #fecaca", color: "#dc2626" }}
+          >
+            {acting === "cancelled"
+              ? <Loader2 size={12} className="animate-spin" />
+              : <X size={12} />}
+            {appt.appt_status === "confirmed" ? "Cancelar cita" : "Cancelar"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -206,6 +243,15 @@ export default function MisCitas() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function updateAppointmentStatus(id, newStatus) {
+    const { error } = await supabase.rpc("update_my_appointment_status", {
+      p_appointment_id: id,
+      p_status:         newStatus,
+    });
+    if (error) throw error;
+    setAppts(prev => prev.map(a => a.id === id ? { ...a, appt_status: newStatus } : a));
   }
 
   function closeForm() {
@@ -344,7 +390,7 @@ export default function MisCitas() {
                 Próximas citas
               </h2>
               <div className="space-y-3">
-                {upcoming.map(a => <AppointmentCard key={a.id} appt={a} />)}
+                {upcoming.map(a => <AppointmentCard key={a.id} appt={a} onUpdateStatus={updateAppointmentStatus} />)}
               </div>
             </div>
           )}
@@ -364,7 +410,7 @@ export default function MisCitas() {
                 Citas anteriores
               </h2>
               <div className="space-y-3">
-                {past.map(a => <AppointmentCard key={a.id} appt={a} />)}
+                {past.map(a => <AppointmentCard key={a.id} appt={a} onUpdateStatus={updateAppointmentStatus} />)}
               </div>
             </div>
           )}

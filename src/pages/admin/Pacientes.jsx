@@ -2,15 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, ChevronRight, UserPlus, X, Loader2, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-const STATUS_LABEL = { active: "Activo", inactive: "Inactivo", discharged: "Alta" };
-const STATUS_STYLE = {
-  active:     { background: "#e8f4fd", color: "#1565c0" },
-  inactive:   { background: "#f3f4f6", color: "#6b7280" },
-  discharged: { background: "#e8f5e9", color: "#2e7d32" },
-};
+import { patientStatus } from "../../lib/statusStyles";
 
 async function fetchPatients() {
   const { data, error } = await supabase.rpc("get_all_patients");
@@ -151,7 +143,7 @@ export default function Pacientes() {
                   </tr>
                 ) : filtered.map(p => {
                   const initials = (p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-                  const sc = STATUS_STYLE[p.patient_status] ?? STATUS_STYLE.inactive;
+                  const sc = patientStatus(p.patient_status);
                   const hasPending = Number(p.pending_amount) > 0;
                   return (
                     <tr key={p.patient_id} className="hover:bg-gray-50 transition-colors">
@@ -168,8 +160,8 @@ export default function Pacientes() {
                       </td>
                       <td className="px-6 py-4 text-sm" style={{ color: "#374151" }}>{p.treatment || "—"}</td>
                       <td className="px-6 py-4">
-                        <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={sc}>
-                          {STATUS_LABEL[p.patient_status] ?? p.patient_status}
+                        <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold w-fit" style={sc.badge}>
+                          {sc.icon} {sc.label}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm" style={{ color: "#6b7280" }}>

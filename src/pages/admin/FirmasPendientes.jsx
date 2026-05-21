@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PenLine, Send, CheckCircle, Clock } from "lucide-react";
 import { pendingSignatures } from "../../data/mockData";
+import { consentWaitStyle } from "../../lib/statusStyles";
 
 export default function FirmasPendientes() {
   const [sent, setSent] = useState([]);
@@ -47,11 +48,8 @@ export default function FirmasPendientes() {
                         <Clock size={12} />
                         Añadido: {new Date(sig.dateAdded).toLocaleDateString("es-ES")}
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                        background: sig.daysWaiting > 3 ? "#fee2e2" : "#fff8e1",
-                        color: sig.daysWaiting > 3 ? "#dc2626" : "#f57f17",
-                      }}>
-                        {sig.daysWaiting} día{sig.daysWaiting !== 1 ? "s" : ""} sin firmar
+                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={consentWaitStyle(sig.daysWaiting)}>
+                        ⏳ {sig.daysWaiting} día{sig.daysWaiting !== 1 ? "s" : ""} sin firmar
                       </span>
                     </div>
                   </div>

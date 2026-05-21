@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Plus, X, Loader2, AlertCircle, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Loader2, AlertCircle, Save, EyeOff, Eye } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { apptStatus } from "../../lib/statusStyles";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -13,30 +14,6 @@ const STATUS_OPTIONS = [
   { value: "no_show",    label: "No presentado" },
 ];
 
-const STATUS_MAP = {
-  scheduled: { label: "Programada",    bg: "#fffbeb", color: "#b45309" },
-  confirmed: { label: "Confirmada",    bg: "#dcfce7", color: "#15803d" },
-  completed: { label: "Completada",    bg: "#f3f4f6", color: "#6b7280" },
-  cancelled: { label: "Cancelada",     bg: "#fee2e2", color: "#dc2626" },
-  no_show:   { label: "No presentado", bg: "#fff7ed", color: "#c2410c" },
-};
-
-function getStatusStyle(status) {
-  switch (status) {
-    case "confirmed":
-      return { badgeClass: "bg-green-100 text-green-700",   dot: "🟢", icon: "✓",  label: "Confirmada",    cardClass: "",           borderColor: "#22c55e", opacity: 1,    strike: false };
-    case "scheduled":
-      return { badgeClass: "bg-amber-100 text-amber-700",   dot: "🟡", icon: "⏰", label: "Programada",    cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
-    case "completed":
-      return { badgeClass: "bg-gray-100 text-gray-500",     dot: "⚪", icon: "✓",  label: "Completada",    cardClass: "opacity-50", borderColor: "#9ca3af", opacity: 0.55, strike: false };
-    case "cancelled":
-      return { badgeClass: "bg-red-100 text-red-700",       dot: "🔴", icon: "❌", label: "Cancelada",     cardClass: "opacity-60", borderColor: "#ef4444", opacity: 0.55, strike: true  };
-    case "no_show":
-      return { badgeClass: "bg-orange-100 text-orange-700", dot: "🟠", icon: "⚠️", label: "No presentado", cardClass: "opacity-60", borderColor: "#f97316", opacity: 0.55, strike: false };
-    default:
-      return { badgeClass: "bg-amber-100 text-amber-700",   dot: "🟡", icon: "⏰", label: "Programada",    cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
-  }
-}
 
 const TIME_SLOTS = [];
 for (let h = 8; h < 20; h++) {
@@ -295,6 +272,9 @@ export default function Agenda() {
   const [editError,     setEditError]     = useState("");
   const [saving,        setSaving]        = useState(false);
 
+  // Cancelled visibility toggle
+  const [hideCancelled, setHideCancelled] = useState(false);
+
   // ── load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
@@ -342,7 +322,7 @@ export default function Agenda() {
 
   function apptsByDay(dateStr) {
     return appts
-      .filter(a => a.date === dateStr && a.appt_status !== "cancelled")
+      .filter(a => a.date === dateStr && !(hideCancelled && a.appt_status === "cancelled"))
       .sort((a, b) => (a.appointment_time ?? "").localeCompare(b.appointment_time ?? ""));
   }
 
@@ -523,6 +503,16 @@ export default function Agenda() {
             </div>
           )}
           <button
+            onClick={() => setHideCancelled(h => !h)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+            style={hideCancelled
+              ? { background: "#fee2e2", color: "#dc2626", border: "1px solid #fecaca" }
+              : { border: "1px solid #e5e0d8", color: "#6b7280" }}
+          >
+            {hideCancelled ? <Eye size={13} /> : <EyeOff size={13} />}
+            {hideCancelled ? "Mostrar canceladas" : "Ocultar canceladas"}
+          </button>
+          <button
             onClick={() => openCreate()}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
             style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)", color: "white" }}
@@ -593,30 +583,35 @@ export default function Agenda() {
                 <div className="space-y-1.5">
                   {dayAppts.map(appt => {
                     const c  = doctorColor(appt.doctor_id);
-                    const sc = getStatusStyle(appt.appt_status);
+                    const sc = apptStatus(appt.appt_status);
                     return (
                       <div
                         key={appt.id}
                         onClick={() => openEdit(appt)}
-                        className={`rounded-lg p-2 text-xs cursor-pointer transition-opacity hover:opacity-70 ${sc.cardClass}`}
+                        className="rounded-lg p-2 text-xs cursor-pointer transition-opacity hover:opacity-70"
                         style={{
-                          background: sc.opacity < 1 ? "#f9fafb" : c.light,
+                          ...sc.card,
+                          background: sc.dim ? "#f9fafb" : c.light,
                           borderLeft: `3px solid ${sc.borderColor}`,
                         }}
                       >
-                        {/* Time + status icon */}
+                        {/* Time + status badge */}
                         <div className="flex items-center justify-between gap-1">
                           <p className="font-semibold leading-none" style={{ color: sc.borderColor }}>
                             {appt.appointment_time?.slice(0, 5)}
                           </p>
-                          <span style={{ fontSize: 9, lineHeight: 1 }} title={sc.label}>
-                            {sc.dot}
+                          <span
+                            className="px-1 rounded text-white font-bold"
+                            style={{ fontSize: 8, lineHeight: "14px", background: sc.borderColor }}
+                            title={sc.label}
+                          >
+                            {sc.icon}
                           </span>
                         </div>
                         {/* Patient name */}
                         <p
-                          className={`truncate mt-1 font-medium ${sc.strike ? "line-through" : ""}`}
-                          style={{ color: "#374151" }}
+                          className="truncate mt-1 font-medium"
+                          style={{ color: "#374151", textDecoration: sc.strike ? "line-through" : "none" }}
                         >
                           {appt.patient_name?.split(" ")[0] ?? "—"}
                         </p>

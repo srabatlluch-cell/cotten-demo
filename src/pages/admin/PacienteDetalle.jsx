@@ -3,30 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { getDocumentUrl, logAccess, formatFileSize, mimeToType } from "../../lib/storage";
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-const APPT_LABEL = { scheduled: "Programada", confirmed: "Confirmada", completed: "Completada", cancelled: "Cancelada", no_show: "No asistió" };
-const APPT_STYLE = {
-  confirmed:  { background: "#e8f5e9", color: "#2e7d32" },
-  completed:  { background: "#f3f4f6", color: "#6b7280" },
-  scheduled:  { background: "#fff8e1", color: "#f57f17" },
-  cancelled:  { background: "#fef2f2", color: "#dc2626" },
-  no_show:    { background: "#fef2f2", color: "#dc2626" },
-};
-const PAY_LABEL = { pending: "Pendiente", paid: "Pagado", overdue: "Vencido", cancelled: "Cancelado" };
-const PAY_STYLE = {
-  paid:      { background: "#e8f5e9", color: "#2e7d32" },
-  pending:   { background: "#fff8e1", color: "#f57f17" },
-  overdue:   { background: "#fef2f2", color: "#dc2626" },
-  cancelled: { background: "#f3f4f6", color: "#6b7280" },
-};
-const STATUS_LABEL = { active: "Activo", inactive: "Inactivo", discharged: "Alta" };
-const STATUS_STYLE = {
-  active:     { background: "#e8f4fd", color: "#1565c0" },
-  inactive:   { background: "#f3f4f6", color: "#6b7280" },
-  discharged: { background: "#e8f5e9", color: "#2e7d32" },
-};
+import { apptStatus, patientStatus, paymentStatus } from "../../lib/statusStyles";
 
 // ─── data fetching ─────────────────────────────────────────────────────────────
 
@@ -141,7 +118,7 @@ export default function PacienteDetalle() {
 
   const { patient, appts, docs, payments } = data;
   const initials = (patient.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-  const sc = STATUS_STYLE[patient.patient_status] ?? STATUS_STYLE.inactive;
+  const sc = patientStatus(patient.patient_status);
 
   const tabs = [
     { id: "info",  label: "Información",         icon: User },
@@ -167,8 +144,8 @@ export default function PacienteDetalle() {
             {[patient.dni && `DNI: ${patient.dni}`, patient.email, patient.phone].filter(Boolean).join(" · ")}
           </p>
           <div className="flex flex-wrap gap-2 mt-3">
-            <span className="text-xs px-3 py-1 rounded-full font-medium" style={sc}>
-              {STATUS_LABEL[patient.patient_status] ?? patient.patient_status}
+            <span className="flex items-center gap-1 text-xs px-3 py-1 rounded-full font-semibold" style={sc.badge}>
+              {sc.icon} {sc.label}
             </span>
             {patient.treatment && (
               <span className="text-xs px-3 py-1 rounded-full font-medium" style={{ background: "#f3e8ff", color: "#7c3aed" }}>
@@ -271,10 +248,11 @@ export default function PacienteDetalle() {
             {appts.length === 0 ? (
               <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay citas registradas</p>
             ) : appts.map(a => {
-              const as = APPT_STYLE[a.appt_status] ?? APPT_STYLE.scheduled;
+              const as = apptStatus(a.appt_status);
               return (
-                <div key={a.id} className="flex items-center gap-4 px-6 py-4">
-                  <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0" style={{ background: "#1a274412" }}>
+                <div key={a.id} className="flex items-center gap-4 px-6 py-4" style={as.card}>
+                  <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+                    style={{ background: as.dim ? "#f3f4f6" : "#1a274412", borderLeft: `3px solid ${as.borderColor}` }}>
                     <span className="text-xs font-bold" style={{ color: "#1a2744" }}>
                       {new Date(a.date + "T12:00").toLocaleDateString("es-ES", { day: "2-digit" })}
                     </span>
@@ -283,13 +261,13 @@ export default function PacienteDetalle() {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium" style={{ color: "#1a2744" }}>{a.treatment || "Consulta"}</p>
+                    <p className="text-sm font-medium" style={{ color: "#1a2744", textDecoration: as.strike ? "line-through" : "none" }}>{a.treatment || "Consulta"}</p>
                     <p className="text-xs" style={{ color: "#9ca3af" }}>
                       {[String(a.appointment_time).slice(0, 5) + "h", a.doctor_name, a.room].filter(Boolean).join(" · ")}
                     </p>
                   </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full" style={as}>
-                    {APPT_LABEL[a.appt_status] ?? a.appt_status}
+                  <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold" style={as.badge}>
+                    {as.icon} {as.label}
                   </span>
                 </div>
               );
@@ -346,7 +324,7 @@ export default function PacienteDetalle() {
             {payments.length === 0 ? (
               <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay pagos registrados</p>
             ) : payments.map(p => {
-              const ps = PAY_STYLE[p.pay_status] ?? PAY_STYLE.pending;
+              const ps = paymentStatus(p.pay_status);
               return (
                 <div key={p.id} className="flex items-center gap-4 px-6 py-4">
                   <div className="flex-1 min-w-0">
@@ -358,8 +336,8 @@ export default function PacienteDetalle() {
                   <p className="text-sm font-semibold" style={{ color: "#1a2744" }}>
                     {Number(p.amount).toLocaleString("es-ES")} €
                   </p>
-                  <span className="text-xs px-2.5 py-1 rounded-full" style={ps}>
-                    {PAY_LABEL[p.pay_status] ?? p.pay_status}
+                  <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold" style={ps.badge}>
+                    {ps.icon} {ps.label}
                   </span>
                 </div>
               );
