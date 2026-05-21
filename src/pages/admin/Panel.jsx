@@ -3,6 +3,23 @@ import { Users, Calendar, CreditCard, PenLine, ChevronRight, Loader2 } from "luc
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 
+function getStatusStyle(status) {
+  switch (status) {
+    case "confirmed":
+      return { badgeClass: "bg-green-100 text-green-700",   dot: "🟢", icon: "✓",  label: "Confirmada",    borderColor: "#22c55e" };
+    case "scheduled":
+      return { badgeClass: "bg-amber-100 text-amber-700",   dot: "🟡", icon: "⏰", label: "Programada",    borderColor: "#f59e0b" };
+    case "completed":
+      return { badgeClass: "bg-gray-100 text-gray-500",     dot: "⚪", icon: "✓",  label: "Completada",    borderColor: "#9ca3af" };
+    case "cancelled":
+      return { badgeClass: "bg-red-100 text-red-700",       dot: "🔴", icon: "❌", label: "Cancelada",     borderColor: "#ef4444" };
+    case "no_show":
+      return { badgeClass: "bg-orange-100 text-orange-700", dot: "🟠", icon: "⚠️", label: "No presentado", borderColor: "#f97316" };
+    default:
+      return { badgeClass: "bg-amber-100 text-amber-700",   dot: "🟡", icon: "⏰", label: "Programada",    borderColor: "#f59e0b" };
+  }
+}
+
 const STATUS_LABEL = { active: "Activo", inactive: "Inactivo", discharged: "Alta" };
 const STATUS_STYLE = {
   active:    { background: "#e8f4fd", color: "#1565c0" },
@@ -100,22 +117,36 @@ export default function Panel() {
             ) : today.length === 0 ? (
               <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay citas programadas hoy</p>
             ) : (
-              today.map(a => (
-                <div key={a.id} className="flex items-center gap-4 px-6 py-4">
-                  <div className="w-12 text-right flex-shrink-0">
-                    <p className="text-sm font-semibold" style={{ color: "#1a2744" }}>{String(a.appointment_time).slice(0, 5)}</p>
+              today.map(a => {
+                const sc = getStatusStyle(a.appt_status);
+                return (
+                  <div key={a.id} className="flex items-center gap-4 px-6 py-4">
+                    {/* Time */}
+                    <div className="w-12 text-right flex-shrink-0">
+                      <p className="text-sm font-semibold" style={{ color: "#1a2744" }}>
+                        {String(a.appointment_time).slice(0, 5)}
+                      </p>
+                    </div>
+                    {/* Status-colored divider */}
+                    <div className="w-px h-8 flex-shrink-0 rounded-full" style={{ background: sc.borderColor }} />
+                    {/* Patient + treatment */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{a.patient_name}</p>
+                      <p className="text-xs truncate" style={{ color: "#9ca3af" }}>{a.treatment}</p>
+                    </div>
+                    {/* Doctor / room */}
+                    <div className="text-right flex-shrink-0 hidden sm:block">
+                      {a.doctor_name && <p className="text-xs" style={{ color: "#6b7280" }}>{a.doctor_name.split(" ").slice(-1)[0]}</p>}
+                      {a.room        && <p className="text-xs" style={{ color: "#9ca3af" }}>{a.room}</p>}
+                    </div>
+                    {/* Status badge */}
+                    <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${sc.badgeClass}`}>
+                      <span style={{ fontSize: 9 }}>{sc.dot}</span>
+                      {sc.label}
+                    </span>
                   </div>
-                  <div className="w-px h-8 flex-shrink-0" style={{ background: "#c9a96e40" }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{a.patient_name}</p>
-                    <p className="text-xs truncate" style={{ color: "#9ca3af" }}>{a.treatment}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    {a.doctor_name && <p className="text-xs" style={{ color: "#6b7280" }}>{a.doctor_name.split(" ").slice(-1)[0]}</p>}
-                    {a.room        && <p className="text-xs" style={{ color: "#9ca3af" }}>{a.room}</p>}
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

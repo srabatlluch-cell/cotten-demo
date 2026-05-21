@@ -24,17 +24,17 @@ const STATUS_MAP = {
 function getStatusStyle(status) {
   switch (status) {
     case "confirmed":
-      return { badgeClass: "bg-green-100 text-green-700",   icon: "✓", label: "Confirmada",    cardClass: "",           borderColor: "#22c55e", opacity: 1,    strike: false };
+      return { badgeClass: "bg-green-100 text-green-700",   dot: "🟢", icon: "✓",  label: "Confirmada",    cardClass: "",           borderColor: "#22c55e", opacity: 1,    strike: false };
     case "scheduled":
-      return { badgeClass: "bg-amber-100 text-amber-700",   icon: "🕐", label: "Programada",   cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
+      return { badgeClass: "bg-amber-100 text-amber-700",   dot: "🟡", icon: "⏰", label: "Programada",    cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
     case "completed":
-      return { badgeClass: "bg-gray-100 text-gray-500",     icon: "✓", label: "Completada",    cardClass: "opacity-50", borderColor: "#9ca3af", opacity: 0.55, strike: false };
+      return { badgeClass: "bg-gray-100 text-gray-500",     dot: "⚪", icon: "✓",  label: "Completada",    cardClass: "opacity-50", borderColor: "#9ca3af", opacity: 0.55, strike: false };
     case "cancelled":
-      return { badgeClass: "bg-red-100 text-red-700",       icon: "✕", label: "Cancelada",     cardClass: "opacity-60", borderColor: "#ef4444", opacity: 0.55, strike: true  };
+      return { badgeClass: "bg-red-100 text-red-700",       dot: "🔴", icon: "❌", label: "Cancelada",     cardClass: "opacity-60", borderColor: "#ef4444", opacity: 0.55, strike: true  };
     case "no_show":
-      return { badgeClass: "bg-orange-100 text-orange-700", icon: "✗", label: "No presentado", cardClass: "opacity-60", borderColor: "#f97316", opacity: 0.55, strike: false };
+      return { badgeClass: "bg-orange-100 text-orange-700", dot: "🟠", icon: "⚠️", label: "No presentado", cardClass: "opacity-60", borderColor: "#f97316", opacity: 0.55, strike: false };
     default:
-      return { badgeClass: "bg-amber-100 text-amber-700",   icon: "🕐", label: "Programada",   cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
+      return { badgeClass: "bg-amber-100 text-amber-700",   dot: "🟡", icon: "⏰", label: "Programada",    cardClass: "",           borderColor: "#f59e0b", opacity: 1,    strike: false };
   }
 }
 
@@ -604,15 +604,23 @@ export default function Agenda() {
                           borderLeft: `3px solid ${sc.borderColor}`,
                         }}
                       >
-                        <p className="font-semibold" style={{ color: sc.borderColor }}>
-                          {appt.appointment_time?.slice(0, 5)}
-                        </p>
+                        {/* Time + status icon */}
+                        <div className="flex items-center justify-between gap-1">
+                          <p className="font-semibold leading-none" style={{ color: sc.borderColor }}>
+                            {appt.appointment_time?.slice(0, 5)}
+                          </p>
+                          <span style={{ fontSize: 9, lineHeight: 1 }} title={sc.label}>
+                            {sc.dot}
+                          </span>
+                        </div>
+                        {/* Patient name */}
                         <p
-                          className={`truncate mt-0.5 font-medium ${sc.strike ? "line-through" : ""}`}
+                          className={`truncate mt-1 font-medium ${sc.strike ? "line-through" : ""}`}
                           style={{ color: "#374151" }}
                         >
                           {appt.patient_name?.split(" ")[0] ?? "—"}
                         </p>
+                        {/* Treatment */}
                         <p className="truncate" style={{ color: "#9ca3af" }}>
                           {(appt.treatment ?? "").split(" ").slice(0, 3).join(" ")}
                         </p>
