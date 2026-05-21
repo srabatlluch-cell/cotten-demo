@@ -18,17 +18,16 @@ const CATEGORIES = [
 
 // ─── data fetching ────────────────────────────────────────────────────────────
 
-async function fetchAllDocuments() {
-  const { data, error } = await supabase.rpc("get_all_documents");
+async function fetchPatientList() {
+  const { data, error, status, statusText } = await supabase.rpc("get_all_patients");
+  console.log("[AdminDocumentos] fetchPatientList raw →", { data, error, status, statusText, count: data?.length });
   if (error) throw error;
   return data ?? [];
 }
 
-async function fetchPatientList() {
-  const { data, error } = await supabase
-    .from("patients")
-    .select("id, profile:profiles ( full_name, email )")
-    .order("created_at", { ascending: false });
+async function fetchAllDocuments() {
+  const { data, error, status, statusText } = await supabase.rpc("get_all_documents");
+  console.log("[AdminDocumentos] fetchAllDocuments raw →", { data, error, status, statusText, count: data?.length });
   if (error) throw error;
   return data ?? [];
 }
@@ -40,6 +39,7 @@ export default function Documentos() {
 
   const [docs,          setDocs]          = useState([]);
   const [patients,      setPatients]      = useState([]);
+  const [patientError,  setPatientError]  = useState("");
   const [loadingDocs,   setLoadingDocs]   = useState(true);
   const [filterPatient, setFilterPatient] = useState("");
   const [filterType,    setFilterType]    = useState("");
@@ -56,23 +56,47 @@ export default function Documentos() {
 
   // Load documents and patient list on mount
   useEffect(() => {
+    console.log("[AdminDocumentos] useEffect fired — user?.id =", user?.id);
+    if (!user?.id) {
+      console.log("[AdminDocumentos] no user yet, skipping fetch");
+      return;
+    }
     let cancelled = false;
     (async () => {
       setLoadingDocs(true);
       try {
-        const [rows, ptList] = await Promise.all([fetchAllDocuments(), fetchPatientList()]);
+        console.log("[AdminDocumentos] calling fetchAllDocuments + fetchPatientList...");
+        const [docsResult, patientsResult] = await Promise.allSettled([
+          fetchAllDocuments(),
+          fetchPatientList(),
+        ]);
+        console.log("[AdminDocumentos] fetchAllDocuments result:", docsResult);
+        console.log("[AdminDocumentos] fetchPatientList result:", patientsResult);
+
+        const rows   = docsResult.status === "fulfilled"     ? docsResult.value    : [];
+        const ptList = patientsResult.status === "fulfilled" ? patientsResult.value : [];
+
+        if (docsResult.status === "rejected")
+          console.error("[AdminDocumentos] fetchAllDocuments ERROR:", docsResult.reason);
+        if (patientsResult.status === "rejected")
+          console.error("[AdminDocumentos] fetchPatientList ERROR:", patientsResult.reason);
+
+        console.log("[AdminDocumentos] docs count:", rows.length, "| patients count:", ptList.length);
+        if (ptList.length > 0) console.log("[AdminDocumentos] first patient:", ptList[0]);
+
         if (cancelled) return;
         setDocs(rows);
         setPatients(ptList);
-        if (ptList.length > 0) setTargetPatient(ptList[0].id);
+        if (ptList.length > 0) setTargetPatient(ptList[0].patient_id);
       } catch (err) {
-        console.error("[AdminDocumentos] load error:", err);
+        console.error("[AdminDocumentos] unexpected error:", err);
+        if (!cancelled) setPatientError(err.message ?? String(err));
       } finally {
         if (!cancelled) setLoadingDocs(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.id]);
 
   // ── Filtering ────────────────────────────────────────────────────────────
   const filtered = docs.filter(doc => {
@@ -116,11 +140,11 @@ export default function Documentos() {
       for (const file of files) {
         const row = await staffUploadDocument(file, targetPatient, category);
         // Enrich with patient_name from local patients list
-        const pt = patients.find(p => p.id === targetPatient);
+        const pt = patients.find(p => p.patient_id === targetPatient);
         inserted.push({
           ...row,
-          patient_name:  pt?.profile?.full_name ?? pt?.profile?.email ?? "—",
-          patient_email: pt?.profile?.email ?? "",
+          patient_name:  pt?.full_name ?? pt?.email ?? "—",
+          patient_email: pt?.email ?? "",
         });
       }
       finishProgress();
@@ -290,6 +314,12 @@ export default function Documentos() {
       {/* Staff upload section */}
       <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e0d8" }}>
         <h2 className="font-semibold text-sm mb-4" style={{ color: "#1a2744" }}>Subir documento</h2>
+        {patientError && (
+          <div className="mb-3 flex items-start gap-2 text-xs px-3 py-2.5 rounded-xl" style={{ background: "#fef2f2", color: "#dc2626" }}>
+            <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+            <span><strong>Error al cargar pacientes:</strong> {patientError}</span>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-3 mb-4">
           {/* Patient selector */}
@@ -302,8 +332,8 @@ export default function Documentos() {
             {patients.length === 0
               ? <option value="">Sin pacientes registrados</option>
               : patients.map(pt => (
-                  <option key={pt.id} value={pt.id}>
-                    {pt.profile?.full_name ?? pt.profile?.email ?? pt.id}
+                  <option key={pt.patient_id} value={pt.patient_id}>
+                    {pt.full_name ?? pt.email ?? pt.patient_id}
                   </option>
                 ))
             }

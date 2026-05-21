@@ -111,7 +111,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles
     WHERE id = auth.uid()
-      AND role IN ('doctor', 'staff', 'admin')
+      AND role IN ('doctor', 'staff', 'admin', 'receptionist')
   );
 $$;
 
