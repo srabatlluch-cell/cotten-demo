@@ -1,22 +1,24 @@
 import { useState, useEffect } from "react";
-import { Users, Calendar, CreditCard, PenLine, ChevronRight, Loader2 } from "lucide-react";
+import { Users, Calendar, CreditCard, PenLine, ChevronRight, Loader2, AlertTriangle, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { apptStatus, patientStatus } from "../../lib/statusStyles";
 
 async function loadPanel() {
   const [statsRes, todayRes, recentRes] = await Promise.all([
-    supabase.rpc("get_panel_stats"),
+    supabase.rpc("get_dashboard_stats"),
     supabase.rpc("get_today_appointments"),
     supabase.rpc("get_recent_patients"),
   ]);
   if (statsRes.error)  throw statsRes.error;
   if (todayRes.error)  throw todayRes.error;
   if (recentRes.error) throw recentRes.error;
+  // get_dashboard_stats returns one row as an array
+  const statsRow = Array.isArray(statsRes.data) ? statsRes.data[0] : statsRes.data;
   return {
-    stats:   statsRes.data  ?? {},
-    today:   todayRes.data  ?? [],
-    recent:  recentRes.data ?? [],
+    stats:  statsRow    ?? {},
+    today:  todayRes.data  ?? [],
+    recent: recentRes.data ?? [],
   };
 }
 
@@ -40,16 +42,74 @@ export default function Panel() {
     return () => { cancelled = true; };
   }, []);
 
-  const stats = data?.stats ?? {};
+  const stats  = data?.stats  ?? {};
   const today  = data?.today  ?? [];
   const recent = data?.recent ?? [];
 
+  // ── stat cards ──────────────────────────────────────────────────────────────
   const statCards = [
-    { label: "Total pacientes",   value: loading ? "…" : stats.patient_count      ?? 0,                                   icon: Users,      color: "#1a2744", bg: "#1a274412", link: "/admin/pacientes" },
-    { label: "Citas hoy",         value: loading ? "…" : stats.today_appt_count   ?? 0,                                   icon: Calendar,   color: "#2563eb", bg: "#2563eb12", link: "/admin/agenda" },
-    { label: "Pagos pendientes",  value: loading ? "…" : `${Number(stats.pending_amount ?? 0).toLocaleString("es-ES")} €`, icon: CreditCard, color: "#d97706", bg: "#d9770612", link: "/admin/pagos" },
-    { label: "Firmas pendientes", value: loading ? "…" : stats.pending_signatures ?? 0,                                   icon: PenLine,    color: "#dc2626", bg: "#dc262612", link: "/admin/firmas" },
+    {
+      label: "Total pacientes",
+      value: loading ? "…" : stats.total_patients ?? 0,
+      icon:  Users,
+      color: "#1a2744", bg: "#1a274412",
+      link:  "/admin/pacientes",
+    },
+    {
+      label: "Citas hoy",
+      value: loading ? "…" : stats.appointments_today ?? 0,
+      icon:  Calendar,
+      color: "#2563eb", bg: "#2563eb12",
+      link:  "/admin/agenda",
+    },
+    {
+      label: "Pagos pendientes",
+      value: loading ? "…" : `${Number(stats.pending_payments ?? 0).toLocaleString("es-ES")} €`,
+      icon:  CreditCard,
+      color: "#d97706", bg: "#d9770612",
+      link:  "/admin/pagos",
+    },
+    {
+      label: "Firmas pendientes",
+      value: loading ? "…" : stats.pending_signatures ?? 0,
+      icon:  PenLine,
+      color: "#dc2626", bg: "#dc262612",
+      link:  "/admin/firmas",
+    },
   ];
+
+  // ── alert cards (only shown when data is loaded and condition is met) ───────
+  const alerts = !loading && data ? [
+    stats.overdue_payments > 0 && {
+      id:      "overdue",
+      level:   "red",
+      icon:    AlertCircle,
+      message: `${stats.overdue_payments} pago${stats.overdue_payments !== 1 ? "s" : ""} vencido${stats.overdue_payments !== 1 ? "s" : ""} sin abonar`,
+      link:    "/admin/pagos",
+      cta:     "Ver pagos",
+    },
+    stats.unconfirmed_appointments > 0 && {
+      id:      "unconfirmed",
+      level:   "amber",
+      icon:    AlertTriangle,
+      message: `${stats.unconfirmed_appointments} cita${stats.unconfirmed_appointments !== 1 ? "s" : ""} de hoy sin confirmar`,
+      link:    "/admin/agenda",
+      cta:     "Ver agenda",
+    },
+    stats.old_pending_signatures > 0 && {
+      id:      "old-signatures",
+      level:   "amber",
+      icon:    AlertTriangle,
+      message: `${stats.old_pending_signatures} consentimiento${stats.old_pending_signatures !== 1 ? "s" : ""} pendiente${stats.old_pending_signatures !== 1 ? "s" : ""} de firma desde hace más de 3 días`,
+      link:    "/admin/firmas",
+      cta:     "Ver firmas",
+    },
+  ].filter(Boolean) : [];
+
+  const alertStyles = {
+    red:   { wrap: { background: "#fef2f2", border: "1px solid #fecaca" }, icon: "#dc2626", text: "#991b1b", cta: { color: "#dc2626" } },
+    amber: { wrap: { background: "#fffbeb", border: "1px solid #fde68a" }, icon: "#d97706", text: "#92400e", cta: { color: "#d97706" } },
+  };
 
   return (
     <div className="p-6 lg:p-8">
@@ -60,8 +120,8 @@ export default function Panel() {
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* ── Stat cards ──────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {statCards.map(({ label, value, icon: Icon, color, bg, link }) => (
           <Link key={label} to={link} className="bg-white p-5 rounded-2xl hover:shadow-md transition-all group" style={{ border: "1px solid #e5e0d8" }}>
             <div className="flex items-center justify-between mb-3">
@@ -76,8 +136,26 @@ export default function Panel() {
         ))}
       </div>
 
+      {/* ── Alert cards ─────────────────────────────────────────────────────── */}
+      {alerts.length > 0 && (
+        <div className="space-y-3 mb-8">
+          {alerts.map(({ id, level, icon: Icon, message, link, cta }) => {
+            const s = alertStyles[level];
+            return (
+              <div key={id} className="flex items-center gap-4 px-5 py-3.5 rounded-2xl" style={s.wrap}>
+                <Icon size={16} style={{ color: s.icon, flexShrink: 0 }} />
+                <p className="flex-1 text-sm font-medium" style={{ color: s.text }}>{message}</p>
+                <Link to={link} className="text-xs font-semibold hover:underline flex-shrink-0" style={s.cta}>
+                  {cta} <ChevronRight size={11} className="inline" />
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Today's agenda */}
+        {/* ── Today's agenda ────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
           <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: "#f3f0ea" }}>
             <h2 className="font-semibold text-sm" style={{ color: "#1a2744" }}>Agenda de hoy</h2>
@@ -127,7 +205,7 @@ export default function Panel() {
           </div>
         </div>
 
-        {/* Recent patients */}
+        {/* ── Recent patients ───────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
           <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: "#f3f0ea" }}>
             <h2 className="font-semibold text-sm" style={{ color: "#1a2744" }}>Pacientes recientes</h2>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, ChevronRight, UserPlus, X, Loader2, AlertCircle } from "lucide-react";
+import { Search, ChevronRight, UserPlus, X, Loader2, AlertCircle, Archive, ArchiveRestore, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { patientStatus } from "../../lib/statusStyles";
@@ -11,18 +11,31 @@ async function fetchPatients() {
   return data ?? [];
 }
 
+async function fetchArchivedPatients() {
+  const { data, error } = await supabase.rpc("get_archived_patients");
+  if (error) throw error;
+  return data ?? [];
+}
+
 // ─── component ────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = { full_name: "", email: "", phone: "", dni: "", birth_date: "", treatment: "" };
 
 export default function Pacientes() {
-  const [patients,    setPatients]    = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [query,       setQuery]       = useState("");
-  const [showModal,   setShowModal]   = useState(false);
-  const [form,        setForm]        = useState(EMPTY_FORM);
-  const [creating,    setCreating]    = useState(false);
-  const [createError, setCreateError] = useState("");
+  const [patients,       setPatients]       = useState([]);
+  const [archived,       setArchived]       = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [loadingArchived, setLoadingArchived] = useState(false);
+  const [query,          setQuery]          = useState("");
+  const [showArchived,   setShowArchived]   = useState(false);
+  const [showModal,      setShowModal]      = useState(false);
+  const [form,           setForm]           = useState(EMPTY_FORM);
+  const [creating,       setCreating]       = useState(false);
+  const [createError,    setCreateError]    = useState("");
+
+  // Archive confirmation dialog state
+  const [confirmArchive, setConfirmArchive] = useState(null); // patient object or null
+  const [archiving,      setArchiving]      = useState(null); // patient id being processed
 
   useEffect(() => {
     let cancelled = false;
@@ -40,13 +53,40 @@ export default function Pacientes() {
     return () => { cancelled = true; };
   }, []);
 
+  // Load archived patients when section is first opened
+  useEffect(() => {
+    if (!showArchived || archived.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingArchived(true);
+      try {
+        const rows = await fetchArchivedPatients();
+        if (!cancelled) setArchived(rows);
+      } catch (err) {
+        console.error("[Pacientes] archived load error:", err);
+      } finally {
+        if (!cancelled) setLoadingArchived(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showArchived]);
+
   const filtered = patients.filter(p => {
     const q = query.toLowerCase();
     return (
-      (p.full_name   ?? "").toLowerCase().includes(q) ||
-      (p.email       ?? "").toLowerCase().includes(q) ||
-      (p.treatment   ?? "").toLowerCase().includes(q) ||
-      (p.dni         ?? "").toLowerCase().includes(q)
+      (p.full_name  ?? "").toLowerCase().includes(q) ||
+      (p.email      ?? "").toLowerCase().includes(q) ||
+      (p.treatment  ?? "").toLowerCase().includes(q) ||
+      (p.dni        ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  const filteredArchived = archived.filter(p => {
+    const q = query.toLowerCase();
+    return (
+      (p.full_name  ?? "").toLowerCase().includes(q) ||
+      (p.email      ?? "").toLowerCase().includes(q) ||
+      (p.treatment  ?? "").toLowerCase().includes(q)
     );
   });
 
@@ -57,12 +97,10 @@ export default function Pacientes() {
   async function handleCreate(e) {
     e.preventDefault();
     setCreateError("");
-
     if (!form.email || !form.full_name) {
       setCreateError("Nombre y correo electrónico son obligatorios.");
       return;
     }
-
     setCreating(true);
     try {
       const { data: created, error } = await supabase.rpc("admin_create_patient", {
@@ -75,7 +113,6 @@ export default function Pacientes() {
       });
       if (error) throw error;
 
-      // Send welcome email (fire-and-forget)
       console.log("[Pacientes] patient created, sending welcome email to", form.email);
       sendWelcomeEmail({ to: form.email, patientName: form.full_name })
         .then(() => console.log("[Pacientes] welcome email sent"))
@@ -90,6 +127,47 @@ export default function Pacientes() {
       setCreateError(err.message ?? "Error al crear el paciente. Inténtelo de nuevo.");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleArchive(patient) {
+    setArchiving(patient.patient_id);
+    setConfirmArchive(null);
+    try {
+      const { error } = await supabase.rpc("archive_patient", { p_patient_id: patient.patient_id });
+      if (error) throw error;
+      // Remove from active list, add to archived list (if loaded)
+      setPatients(prev => prev.filter(p => p.patient_id !== patient.patient_id));
+      setArchived(prev => [{
+        patient_id:     patient.patient_id,
+        profile_id:     patient.profile_id,
+        full_name:      patient.full_name,
+        email:          patient.email,
+        treatment:      patient.treatment,
+        patient_status: patient.patient_status,
+        archived_at:    new Date().toISOString(),
+        created_at:     patient.created_at,
+      }, ...prev]);
+    } catch (err) {
+      console.error("[Pacientes] archive error:", err);
+    } finally {
+      setArchiving(null);
+    }
+  }
+
+  async function handleUnarchive(patient) {
+    setArchiving(patient.patient_id);
+    try {
+      const { error } = await supabase.rpc("unarchive_patient", { p_patient_id: patient.patient_id });
+      if (error) throw error;
+      // Remove from archived list, reload active list to get full data
+      setArchived(prev => prev.filter(p => p.patient_id !== patient.patient_id));
+      const rows = await fetchPatients();
+      setPatients(rows);
+    } catch (err) {
+      console.error("[Pacientes] unarchive error:", err);
+    } finally {
+      setArchiving(null);
     }
   }
 
@@ -124,8 +202,8 @@ export default function Pacientes() {
         />
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
+      {/* ── Active patients table ────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl overflow-hidden mb-4" style={{ border: "1px solid #e5e0d8" }}>
         {loading ? (
           <div className="flex items-center justify-center py-16 gap-2" style={{ color: "#9ca3af" }}>
             <Loader2 size={18} className="animate-spin" />
@@ -149,9 +227,10 @@ export default function Pacientes() {
                     </td>
                   </tr>
                 ) : filtered.map(p => {
-                  const initials = (p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-                  const sc = patientStatus(p.patient_status);
+                  const initials  = (p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+                  const sc        = patientStatus(p.patient_status);
                   const hasPending = Number(p.pending_amount) > 0;
+                  const isArchiving = archiving === p.patient_id;
                   return (
                     <tr key={p.patient_id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
@@ -185,9 +264,20 @@ export default function Pacientes() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <Link to={`/admin/pacientes/${p.patient_id}`} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 inline-flex">
-                          <ChevronRight size={16} />
-                        </Link>
+                        <div className="flex items-center gap-1 justify-end">
+                          <button
+                            onClick={() => setConfirmArchive(p)}
+                            disabled={isArchiving}
+                            title="Archivar paciente"
+                            className="p-1.5 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50"
+                            style={{ color: "#d97706" }}
+                          >
+                            {isArchiving ? <Loader2 size={15} className="animate-spin" /> : <Archive size={15} />}
+                          </button>
+                          <Link to={`/admin/pacientes/${p.patient_id}`} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 inline-flex">
+                            <ChevronRight size={16} />
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -198,7 +288,132 @@ export default function Pacientes() {
         )}
       </div>
 
-      {/* New patient modal */}
+      {/* ── Archived patients toggle ─────────────────────────────────────────── */}
+      <button
+        onClick={() => setShowArchived(s => !s)}
+        className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold mb-4 hover:opacity-70 transition-opacity"
+        style={{ color: "#9ca3af" }}
+      >
+        <Archive size={13} />
+        {showArchived ? "Ocultar pacientes archivados" : "Ver pacientes archivados"}
+        {archived.length > 0 && (
+          <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ background: "#f3f0ea", color: "#6b7280" }}>
+            {archived.length}
+          </span>
+        )}
+      </button>
+
+      {showArchived && (
+        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8", opacity: 0.9 }}>
+          {loadingArchived ? (
+            <div className="flex items-center justify-center py-10 gap-2" style={{ color: "#9ca3af" }}>
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-sm">Cargando archivados…</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #f3f0ea", background: "#faf9f7" }}>
+                    {["Paciente", "Tratamiento", "Archivado el", ""].map(h => (
+                      <th key={h} className="px-6 py-3 text-left text-xs uppercase tracking-wider" style={{ color: "#9ca3af" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: "#f3f0ea" }}>
+                  {filteredArchived.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-10 text-center text-sm" style={{ color: "#9ca3af" }}>
+                        {query ? "Sin resultados para esa búsqueda." : "No hay pacientes archivados."}
+                      </td>
+                    </tr>
+                  ) : filteredArchived.map(p => {
+                    const initials = (p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+                    const isUnarchiving = archiving === p.patient_id;
+                    return (
+                      <tr key={p.patient_id} className="transition-colors" style={{ background: "#faf9f7" }}>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold" style={{ background: "#9ca3af" }}>
+                              {initials}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium" style={{ color: "#6b7280" }}>{p.full_name}</p>
+                              <p className="text-xs" style={{ color: "#9ca3af" }}>{p.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm" style={{ color: "#9ca3af" }}>{p.treatment || "—"}</td>
+                        <td className="px-6 py-4 text-sm" style={{ color: "#9ca3af" }}>
+                          {p.archived_at
+                            ? new Date(p.archived_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })
+                            : "—"}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleUnarchive(p)}
+                            disabled={isUnarchiving}
+                            title="Restaurar paciente"
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all hover:bg-green-50 disabled:opacity-50"
+                            style={{ border: "1px solid #d1fae5", color: "#059669" }}
+                          >
+                            {isUnarchiving
+                              ? <Loader2 size={12} className="animate-spin" />
+                              : <ArchiveRestore size={12} />}
+                            Restaurar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Archive confirmation dialog ──────────────────────────────────────── */}
+      {confirmArchive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="px-6 pt-6 pb-2 flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#fff8e1" }}>
+                <AlertTriangle size={18} style={{ color: "#d97706" }} />
+              </div>
+              <div>
+                <h2 className="font-semibold" style={{ color: "#1a2744" }}>Archivar paciente</h2>
+                <p className="text-sm mt-1" style={{ color: "#6b7280" }}>
+                  ¿Archivar a <strong>{confirmArchive.full_name}</strong>?
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4">
+              <div className="rounded-xl px-4 py-3 text-sm" style={{ background: "#faf9f7", border: "1px solid #f3f0ea", color: "#6b7280", lineHeight: 1.6 }}>
+                El paciente será ocultado de la lista principal pero <strong>todos sus datos, citas, documentos y pagos se conservarán</strong> íntegramente por cumplimiento legal. Puede restaurarlo en cualquier momento.
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => setConfirmArchive(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm transition-all"
+                style={{ border: "1px solid #e5e0d8", color: "#6b7280" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleArchive(confirmArchive)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90 flex items-center justify-center gap-2"
+                style={{ background: "#d97706", color: "white" }}
+              >
+                <Archive size={14} /> Archivar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── New patient modal ────────────────────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" style={{ border: "1px solid #e5e0d8" }}>
