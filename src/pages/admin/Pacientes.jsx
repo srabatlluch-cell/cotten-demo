@@ -8,7 +8,9 @@ import { sendWelcomeEmail } from "../../lib/email";
 async function fetchPatients() {
   const { data, error } = await supabase.rpc("get_all_patients");
   if (error) throw error;
-  return data ?? [];
+  const rows = data ?? [];
+  console.log("[Pacientes] get_all_patients returned", rows.length, "rows:", rows.map(p => ({ id: p.patient_id, name: p.full_name })));
+  return rows;
 }
 
 async function fetchArchivedPatients() {
@@ -134,8 +136,11 @@ export default function Pacientes() {
     setArchiving(patient.patient_id);
     setConfirmArchive(null);
     try {
-      const { error } = await supabase.rpc("archive_patient", { p_patient_id: patient.patient_id });
+      console.log("[Pacientes] archiving patient id:", patient.patient_id, "name:", patient.full_name);
+      const { data, error } = await supabase.rpc("archive_patient", { p_patient_id: patient.patient_id });
+      console.log("[Pacientes] archive_patient result — data:", data, "error:", error);
       if (error) throw error;
+      console.log("[Pacientes] archive succeeded, removing from active list");
       // Remove from active list, add to archived list (if loaded)
       setPatients(prev => prev.filter(p => p.patient_id !== patient.patient_id));
       setArchived(prev => [{
@@ -149,7 +154,7 @@ export default function Pacientes() {
         created_at:     patient.created_at,
       }, ...prev]);
     } catch (err) {
-      console.error("[Pacientes] archive error:", err);
+      console.error("[Pacientes] archive error — RPC failed, patient NOT removed from DB:", err);
     } finally {
       setArchiving(null);
     }
