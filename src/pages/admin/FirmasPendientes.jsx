@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { PenLine, Send, CheckCircle, Clock, Plus, X, Loader2, AlertCircle, Eye, EyeOff, Paperclip, FileText, Pencil, Download } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { sendSignatureReminder } from "../../lib/email";
 import { consentWaitStyle } from "../../lib/statusStyles";
 
 const CONSENT_BUCKET = "consent-forms";
@@ -38,7 +39,12 @@ async function loadData() {
   ]);
   if (formsRes.error) throw formsRes.error;
   if (patsRes.error)  throw patsRes.error;
-  return { forms: formsRes.data ?? [], patients: patsRes.data ?? [] };
+
+  const forms = formsRes.data ?? [];
+  console.log("[FirmasPendientes] loaded", forms.length, "forms");
+  forms.forEach(f => console.log(`  form ${f.id} "${f.title}" document_path=${f.document_path ?? "null"}`));
+
+  return { forms, patients: patsRes.data ?? [] };
 }
 
 function validatePdf(file, setError) {
@@ -191,6 +197,10 @@ export default function FirmasPendientes() {
   const [showSigned,  setShowSigned]  = useState(false);
   const [sigModal,    setSigModal]    = useState(null);
   const [sent,        setSent]        = useState(new Set());
+  const [sending,     setSending]     = useState(new Set());
+
+  // Cache of formId → signedUrl so we never re-fetch within the same session
+  const [pdfUrlMap,   setPdfUrlMap]   = useState({});
 
   // Preview modal (post-create + "Ver" on pending rows)
   const [viewForm,       setViewForm]       = useState(null);
@@ -222,7 +232,25 @@ export default function FirmasPendientes() {
       setLoading(true);
       try {
         const d = await loadData();
-        if (!cancelled) { setForms(d.forms); setPatients(d.patients); }
+        if (cancelled) return;
+        setForms(d.forms);
+        setPatients(d.patients);
+
+        // Pre-fetch signed URLs for all forms that have a PDF
+        const withPdf = d.forms.filter(f => f.document_path);
+        console.log("[FirmasPendientes]", withPdf.length, "forms have a document_path — pre-fetching signed URLs");
+        if (withPdf.length > 0) {
+          const entries = await Promise.all(
+            withPdf.map(async f => {
+              const url = await fetchSignedUrl(f.document_path);
+              console.log(`  signed URL for form "${f.title}":`, url ? "ok" : "failed");
+              return [f.id, url];
+            })
+          );
+          if (!cancelled) {
+            setPdfUrlMap(Object.fromEntries(entries.filter(([, url]) => url)));
+          }
+        }
       } catch (err) {
         console.error("[FirmasPendientes] load error:", err);
       } finally {
@@ -238,12 +266,21 @@ export default function FirmasPendientes() {
   // ── open preview modal ───────────────────────────────────────────────────────
   async function openView(target) {
     setViewForm(target);
+    // Use cached URL if available
+    if (pdfUrlMap[target.id]) {
+      setViewPdfUrl(pdfUrlMap[target.id]);
+      setViewPdfLoading(false);
+      return;
+    }
     setViewPdfUrl(null);
     if (target.document_path) {
       setViewPdfLoading(true);
       try {
         const url = await fetchSignedUrl(target.document_path);
-        setViewPdfUrl(url);
+        if (url) {
+          setViewPdfUrl(url);
+          setPdfUrlMap(prev => ({ ...prev, [target.id]: url }));
+        }
       } catch (err) {
         console.error("[FirmasPendientes] preview URL error:", err);
       } finally {
@@ -260,11 +297,19 @@ export default function FirmasPendientes() {
     setEditError("");
     setEditPdfUrl(null);
     if (editFileInputRef.current) editFileInputRef.current.value = "";
+    // Use cached URL if available
+    if (pdfUrlMap[target.id]) {
+      setEditPdfUrl(pdfUrlMap[target.id]);
+      return;
+    }
     if (target.document_path) {
       setEditPdfLoading(true);
       try {
         const url = await fetchSignedUrl(target.document_path);
-        setEditPdfUrl(url);
+        if (url) {
+          setEditPdfUrl(url);
+          setPdfUrlMap(prev => ({ ...prev, [target.id]: url }));
+        }
       } catch (err) {
         console.error("[FirmasPendientes] edit URL error:", err);
       } finally {
@@ -308,6 +353,7 @@ export default function FirmasPendientes() {
       if (pdfFile) {
         uploadedPath = await uploadConsentPDF(form.patient_id, pdfFile);
       }
+      console.log("[FirmasPendientes] calling admin_create_consent_form with document_path:", uploadedPath ?? "null");
       const { data: newId, error } = await supabase.rpc("admin_create_consent_form", {
         p_patient_id:    form.patient_id,
         p_title:         form.title.trim(),
@@ -315,6 +361,7 @@ export default function FirmasPendientes() {
         p_document_path: uploadedPath,
       });
       if (error) throw error;
+      console.log("[FirmasPendientes] form created, id:", newId, "document_path saved:", uploadedPath ?? "null");
 
       const pat = patients.find(p => p.patient_id === form.patient_id);
       const newFormObj = {
@@ -337,6 +384,12 @@ export default function FirmasPendientes() {
       setForm(EMPTY_FORM);
       setPdfFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+
+      // Pre-populate URL cache for the new form so preview opens instantly
+      if (uploadedPath) {
+        const freshUrl = await fetchSignedUrl(uploadedPath);
+        if (freshUrl) setPdfUrlMap(prev => ({ ...prev, [newId]: freshUrl }));
+      }
 
       // Open preview immediately after creation
       await openView(newFormObj);
@@ -494,12 +547,29 @@ export default function FirmasPendientes() {
                           </span>
                         ) : (
                           <button
-                            onClick={() => setSent(prev => new Set([...prev, sig.id]))}
-                            className="flex items-center gap-2 text-xs px-4 py-2.5 rounded-xl font-medium transition-all hover:opacity-90 hover:scale-105"
+                            disabled={sending.has(sig.id)}
+                            onClick={async () => {
+                              const pat = patients.find(p => p.patient_id === sig.patient_id);
+                              if (!pat?.email) return;
+                              setSending(prev => new Set([...prev, sig.id]));
+                              try {
+                                await sendSignatureReminder({
+                                  to: pat.email,
+                                  patientName: sig.patient_name,
+                                  documentTitle: sig.title,
+                                });
+                                setSent(prev => new Set([...prev, sig.id]));
+                              } catch (err) {
+                                console.error("[FirmasPendientes] reminder error:", err);
+                              } finally {
+                                setSending(prev => { const s = new Set(prev); s.delete(sig.id); return s; });
+                              }
+                            }}
+                            className="flex items-center gap-2 text-xs px-4 py-2.5 rounded-xl font-medium transition-all hover:opacity-90 hover:scale-105 disabled:opacity-60"
                             style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)", color: "#1a2744" }}
                           >
-                            <Send size={13} />
-                            Enviar recordatorio
+                            {sending.has(sig.id) ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                            {sending.has(sig.id) ? "Enviando…" : "Enviar recordatorio"}
                           </button>
                         )}
                       </div>

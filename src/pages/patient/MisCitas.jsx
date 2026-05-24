@@ -3,6 +3,7 @@ import { Clock, User, MapPin, Plus, X, Loader2, AlertCircle, CheckCircle } from 
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { apptStatus } from "../../lib/statusStyles";
+import { sendAppointmentConfirmation, sendAppointmentCancellation } from "../../lib/email";
 
 const TREATMENT_OPTIONS = [
   "Consulta inicial",
@@ -47,7 +48,7 @@ function AppointmentCard({ appt, onUpdateStatus }) {
   async function handleAction(newStatus) {
     setActing(newStatus);
     try {
-      await onUpdateStatus(appt.id, newStatus);
+      await onUpdateStatus(appt, newStatus);
     } finally {
       setActing(null);
     }
@@ -245,13 +246,48 @@ export default function MisCitas() {
     }
   }
 
-  async function updateAppointmentStatus(id, newStatus) {
+  async function updateAppointmentStatus(appt, newStatus) {
     const { error } = await supabase.rpc("update_my_appointment_status", {
-      p_appointment_id: id,
+      p_appointment_id: appt.id,
       p_status:         newStatus,
     });
     if (error) throw error;
-    setAppts(prev => prev.map(a => a.id === id ? { ...a, appt_status: newStatus } : a));
+    setAppts(prev => prev.map(a => a.id === appt.id ? { ...a, appt_status: newStatus } : a));
+
+    // Send email notification (fire-and-forget)
+    console.log("[MisCitas] status updated to", newStatus, "— user email:", user?.email);
+    if (user?.email) {
+      const patientName = user.user_metadata?.full_name || user.email;
+      const [y, mo, d] = (appt.date ?? "").split("-").map(Number);
+      const dateStr = new Date(y, mo - 1, d).toLocaleDateString("es-ES", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+      const timeStr = appt.appointment_time?.slice(0, 5) ?? "";
+      if (newStatus === "confirmed") {
+        console.log("[MisCitas] sending confirmation email to", user.email);
+        sendAppointmentConfirmation({
+          to: user.email,
+          patientName,
+          date: dateStr,
+          time: timeStr + "h",
+          doctor: appt.doctor_name ?? "Por asignar",
+          treatment: appt.treatment ?? "—",
+        })
+          .then(() => console.log("[MisCitas] confirmation email sent"))
+          .catch(err => console.error("[MisCitas] confirmation email error:", err));
+      } else if (newStatus === "cancelled") {
+        console.log("[MisCitas] sending cancellation email to", user.email);
+        sendAppointmentCancellation({
+          to: user.email,
+          patientName,
+          date: dateStr,
+          time: timeStr + "h",
+          treatment: appt.treatment ?? "—",
+        })
+          .then(() => console.log("[MisCitas] cancellation email sent"))
+          .catch(err => console.error("[MisCitas] cancellation email error:", err));
+      }
+    } else {
+      console.warn("[MisCitas] no user email found — skipping email");
+    }
   }
 
   function closeForm() {

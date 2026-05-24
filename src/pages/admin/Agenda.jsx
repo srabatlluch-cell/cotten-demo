@@ -3,6 +3,11 @@ import { ChevronLeft, ChevronRight, Plus, X, Loader2, AlertCircle, Save, EyeOff,
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { apptStatus } from "../../lib/statusStyles";
+import {
+  sendAppointmentConfirmation,
+  sendAppointmentCancellation,
+  sendVisitThankYou,
+} from "../../lib/email";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -73,6 +78,33 @@ async function fetchAll() {
     patients:     patRes.data  ?? [],
     doctors:      docRes.data  ?? [],
   };
+}
+
+// ─── email helper ────────────────────────────────────────────────────────────
+
+function dispatchApptEmail({ email, patientName, newStatus, date, time, doctor, treatment }) {
+  if (!email) return;
+  const [y, mo, d] = (date ?? "").split("-").map(Number);
+  const dateStr = new Date(y, mo - 1, d).toLocaleDateString("es-ES", {
+    weekday: "long", day: "2-digit", month: "long", year: "numeric",
+  });
+  const timeStr = (time ?? "").slice(0, 5) + "h";
+
+  const base = { to: email, patientName, date: dateStr, time: timeStr, treatment: treatment ?? "—" };
+
+  if (newStatus === "confirmed") {
+    sendAppointmentConfirmation({ ...base, doctor: doctor ?? "Por asignar" })
+      .then(() => console.log("[Agenda] confirmation email sent to", email))
+      .catch(err => console.error("[Agenda] confirmation email error:", err));
+  } else if (newStatus === "cancelled") {
+    sendAppointmentCancellation(base)
+      .then(() => console.log("[Agenda] cancellation email sent to", email))
+      .catch(err => console.error("[Agenda] cancellation email error:", err));
+  } else if (newStatus === "completed") {
+    sendVisitThankYou({ to: email, patientName, treatment: treatment ?? "—", doctor })
+      .then(() => console.log("[Agenda] thank-you email sent to", email))
+      .catch(err => console.error("[Agenda] thank-you email error:", err));
+  }
 }
 
 // ─── empty forms ─────────────────────────────────────────────────────────────
@@ -437,6 +469,20 @@ export default function Agenda() {
       ));
       setEditAppt(null);
       setEditForm(null);
+
+      // Send email if status changed
+      if (editAppt.appt_status !== editForm.status) {
+        const pat = patients.find(p => p.patient_id === editAppt.patient_id);
+        dispatchApptEmail({
+          email:       pat?.email,
+          patientName: editAppt.patient_name ?? pat?.full_name ?? "",
+          newStatus:   editForm.status,
+          date:        editForm.date,
+          time:        editForm.time,
+          doctor:      doc?.full_name ?? editAppt.doctor_name ?? null,
+          treatment:   editForm.treatment,
+        });
+      }
     } catch (err) {
       console.error("[Agenda] save error:", err);
       setEditError(err.message ?? "Error al guardar los cambios.");
@@ -463,6 +509,19 @@ export default function Agenda() {
       setAppts(prev => prev.map(a =>
         a.id === editAppt.id ? { ...a, appt_status: "cancelled" } : a
       ));
+
+      // Send cancellation email
+      const pat = patients.find(p => p.patient_id === editAppt.patient_id);
+      dispatchApptEmail({
+        email:       pat?.email,
+        patientName: editAppt.patient_name ?? pat?.full_name ?? "",
+        newStatus:   "cancelled",
+        date:        editAppt.date,
+        time:        (editAppt.appointment_time ?? "09:00:00").slice(0, 5),
+        doctor:      editAppt.doctor_name ?? null,
+        treatment:   editAppt.treatment,
+      });
+
       setEditAppt(null);
       setEditForm(null);
     } catch (err) {

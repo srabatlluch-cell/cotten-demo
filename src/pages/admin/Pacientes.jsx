@@ -3,6 +3,7 @@ import { Search, ChevronRight, UserPlus, X, Loader2, AlertCircle } from "lucide-
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { patientStatus } from "../../lib/statusStyles";
+import { sendWelcomeEmail } from "../../lib/email";
 
 async function fetchPatients() {
   const { data, error } = await supabase.rpc("get_all_patients");
@@ -64,7 +65,7 @@ export default function Pacientes() {
 
     setCreating(true);
     try {
-      const { error } = await supabase.rpc("admin_create_patient", {
+      const { data: created, error } = await supabase.rpc("admin_create_patient", {
         p_email:      form.email,
         p_full_name:  form.full_name,
         p_phone:      form.phone      || null,
@@ -73,6 +74,12 @@ export default function Pacientes() {
         p_treatment:  form.treatment  || null,
       });
       if (error) throw error;
+
+      // Send welcome email (fire-and-forget)
+      console.log("[Pacientes] patient created, sending welcome email to", form.email);
+      sendWelcomeEmail({ to: form.email, patientName: form.full_name })
+        .then(() => console.log("[Pacientes] welcome email sent"))
+        .catch(err => console.error("[Pacientes] welcome email error:", err));
 
       const rows = await fetchPatients();
       setPatients(rows);

@@ -4,6 +4,19 @@ import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download
 import { supabase } from "../../lib/supabase";
 import { getDocumentUrl, logAccess, formatFileSize, mimeToType } from "../../lib/storage";
 import { apptStatus, patientStatus, paymentStatus } from "../../lib/statusStyles";
+import {
+  sendAppointmentConfirmation,
+  sendAppointmentCancellation,
+  sendVisitThankYou,
+} from "../../lib/email";
+
+const APPT_STATUS_OPTIONS = [
+  { value: "scheduled",  label: "Programada" },
+  { value: "confirmed",  label: "Confirmada" },
+  { value: "completed",  label: "Completada" },
+  { value: "cancelled",  label: "Cancelada" },
+  { value: "no_show",    label: "No presentado" },
+];
 
 // ─── data fetching ─────────────────────────────────────────────────────────────
 
@@ -30,13 +43,14 @@ async function loadDetail(patientId) {
 
 export default function PacienteDetalle() {
   const { id } = useParams();
-  const [data,         setData]         = useState(null);
-  const [loading,      setLoading]      = useState(true);
-  const [notFound,     setNotFound]     = useState(false);
-  const [tab,          setTab]          = useState("info");
-  const [notes,        setNotes]        = useState("");
-  const [savingNotes,  setSavingNotes]  = useState(false);
-  const [actionLoading, setActionLoading] = useState(null);
+  const [data,           setData]           = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [notFound,       setNotFound]       = useState(false);
+  const [tab,            setTab]            = useState("info");
+  const [notes,          setNotes]          = useState("");
+  const [savingNotes,    setSavingNotes]    = useState(false);
+  const [actionLoading,  setActionLoading]  = useState(null);
+  const [statusChanging, setStatusChanging] = useState(null); // appointment id being updated
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +107,58 @@ export default function PacienteDetalle() {
       console.error("[PacienteDetalle] open doc error:", err);
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  async function changeApptStatus(appt, newStatus) {
+    if (appt.appt_status === newStatus) return;
+    setStatusChanging(appt.id);
+    try {
+      const { error } = await supabase.rpc("admin_update_appointment", {
+        p_appointment_id: appt.id,
+        p_date:           appt.date,
+        p_time:           String(appt.appointment_time).slice(0, 5),
+        p_treatment:      appt.treatment ?? "",
+        p_room:           appt.room ?? "",
+        p_status:         newStatus,
+        p_doctor_id:      appt.doctor_id ?? null,
+      });
+      if (error) throw error;
+
+      setData(prev => ({
+        ...prev,
+        appts: prev.appts.map(a => a.id === appt.id ? { ...a, appt_status: newStatus } : a),
+      }));
+
+      // Send email — patient.email is already loaded in data.patient
+      const email = data?.patient?.email;
+      if (email) {
+        const patientName = data.patient.full_name ?? email;
+        const [y, mo, d] = (appt.date ?? "").split("-").map(Number);
+        const dateStr = new Date(y, mo - 1, d).toLocaleDateString("es-ES", {
+          weekday: "long", day: "2-digit", month: "long", year: "numeric",
+        });
+        const timeStr = String(appt.appointment_time).slice(0, 5) + "h";
+        const base = { to: email, patientName, date: dateStr, time: timeStr, treatment: appt.treatment ?? "—" };
+
+        if (newStatus === "confirmed") {
+          sendAppointmentConfirmation({ ...base, doctor: appt.doctor_name ?? "Por asignar" })
+            .then(() => console.log("[PacienteDetalle] confirmation email sent"))
+            .catch(err => console.error("[PacienteDetalle] confirmation email error:", err));
+        } else if (newStatus === "cancelled") {
+          sendAppointmentCancellation(base)
+            .then(() => console.log("[PacienteDetalle] cancellation email sent"))
+            .catch(err => console.error("[PacienteDetalle] cancellation email error:", err));
+        } else if (newStatus === "completed") {
+          sendVisitThankYou({ to: email, patientName, treatment: appt.treatment ?? "—", doctor: appt.doctor_name ?? null })
+            .then(() => console.log("[PacienteDetalle] thank-you email sent"))
+            .catch(err => console.error("[PacienteDetalle] thank-you email error:", err));
+        }
+      }
+    } catch (err) {
+      console.error("[PacienteDetalle] status change error:", err);
+    } finally {
+      setStatusChanging(null);
     }
   }
 
@@ -249,8 +315,10 @@ export default function PacienteDetalle() {
               <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay citas registradas</p>
             ) : appts.map(a => {
               const as = apptStatus(a.appt_status);
+              const isChanging = statusChanging === a.id;
               return (
                 <div key={a.id} className="flex items-center gap-4 px-6 py-4" style={as.card}>
+                  {/* Date chip */}
                   <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
                     style={{ background: as.dim ? "#f3f4f6" : "#1a274412", borderLeft: `3px solid ${as.borderColor}` }}>
                     <span className="text-xs font-bold" style={{ color: "#1a2744" }}>
@@ -260,15 +328,33 @@ export default function PacienteDetalle() {
                       {new Date(a.date + "T12:00").toLocaleDateString("es-ES", { month: "short" })}
                     </span>
                   </div>
+                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium" style={{ color: "#1a2744", textDecoration: as.strike ? "line-through" : "none" }}>{a.treatment || "Consulta"}</p>
                     <p className="text-xs" style={{ color: "#9ca3af" }}>
                       {[String(a.appointment_time).slice(0, 5) + "h", a.doctor_name, a.room].filter(Boolean).join(" · ")}
                     </p>
                   </div>
-                  <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold" style={as.badge}>
-                    {as.icon} {as.label}
-                  </span>
+                  {/* Status selector */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isChanging ? (
+                      <Loader2 size={14} className="animate-spin" style={{ color: "#9ca3af" }} />
+                    ) : (
+                      <select
+                        value={a.appt_status}
+                        onChange={e => changeApptStatus(a, e.target.value)}
+                        className="text-xs rounded-lg px-2 py-1.5 outline-none bg-white cursor-pointer"
+                        style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                      >
+                        {APPT_STATUS_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    )}
+                    <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold" style={as.badge}>
+                      {as.icon} {as.label}
+                    </span>
+                  </div>
                 </div>
               );
             })}
