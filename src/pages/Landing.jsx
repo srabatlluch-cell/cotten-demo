@@ -54,6 +54,19 @@ const treatments = [
     tag: "Especialidad principal",
     desc: "Técnica avanzada con implantes de carga inmediata. Recupere su sonrisa en 72 horas con resultados permanentes y sin necesidad de injertos óseos.",
     featured: true,
+    modal: {
+      description: "La implantología basal es una técnica revolucionaria que permite colocar implantes dentales en pacientes que han perdido hueso, sin necesidad de injertos óseos previos. El Dr. Philippe Cotten es pionero en España con más de 27 años de experiencia.",
+      sections: [
+        {
+          heading: "Ventajas",
+          items: ["Sin injerto óseo", "Carga inmediata — dientes en 72 h", "Apto para pacientes con hueso insuficiente", "Alta tasa de éxito"],
+        },
+        {
+          heading: "¿Para quién?",
+          items: ["Pacientes con pérdida ósea severa", "Pacientes que han fracasado con implantes convencionales", "Pacientes edéntulos totales"],
+        },
+      ],
+    },
   },
   {
     icon: Activity,
@@ -61,6 +74,19 @@ const treatments = [
     tag: "Salud gingival",
     desc: "Tratamiento integral de enfermedades periodontales para recuperar y mantener la salud de sus encías con las técnicas más actuales.",
     featured: false,
+    modal: {
+      description: "Tratamiento especializado de las enfermedades de las encías y los tejidos de soporte dental. Prevenimos y tratamos la periodontitis para mantener la salud de tus encías y conservar tus dientes naturales.",
+      sections: [
+        {
+          heading: "Tratamientos",
+          items: ["Limpieza profesional profunda", "Raspado y alisado radicular", "Cirugía periodontal", "Mantenimiento periodontal"],
+        },
+        {
+          heading: "Señales de alerta",
+          items: ["Encías que sangran", "Mal aliento persistente", "Dientes que se mueven", "Encías retraídas"],
+        },
+      ],
+    },
   },
   {
     icon: Smile,
@@ -68,6 +94,19 @@ const treatments = [
     tag: "Alineación dental",
     desc: "Brackets estéticos y alineadores invisibles para corregir la posición de sus dientes con total comodidad y discreción.",
     featured: false,
+    modal: {
+      description: "Corregimos la posición de tus dientes y mandíbula para conseguir una sonrisa perfecta y una mordida funcional. Disponemos de ortodoncia tradicional y alineadores invisibles.",
+      sections: [
+        {
+          heading: "Opciones disponibles",
+          items: ["Brackets metálicos", "Brackets estéticos (cerámica)", "Alineadores invisibles (Invisalign)", "Ortodoncia lingual"],
+        },
+        {
+          heading: "¿Quién puede tratarse?",
+          items: ["Adultos, niños y adolescentes", "Casos leves y complejos", "Compatible con otros tratamientos dentales"],
+        },
+      ],
+    },
   },
   {
     icon: Sparkles,
@@ -75,8 +114,141 @@ const treatments = [
     tag: "Sonrisa perfecta",
     desc: "Blanqueamiento profesional, carillas de porcelana y diseño de sonrisa para una apariencia natural y radiante.",
     featured: false,
+    modal: {
+      description: "Transformamos tu sonrisa con los últimos avances en estética dental. Desde un blanqueamiento hasta un cambio completo de imagen con carillas de porcelana.",
+      sections: [
+        {
+          heading: "Tratamientos",
+          items: ["Blanqueamiento dental profesional", "Carillas de porcelana", "Composite dental", "Diseño de sonrisa digital"],
+        },
+        {
+          heading: "Resultado",
+          items: ["Sonrisas naturales y duraderas adaptadas a tu rostro", "Tratamientos mínimamente invasivos", "Resultados visibles desde la primera sesión"],
+        },
+      ],
+    },
   },
 ];
+
+/* ── Treatment modal ──────────────────────────────────────── */
+function TreatmentModal({ treatment, onClose, onContact }) {
+  const { icon: Icon, title, featured, modal } = treatment;
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{
+        background: "rgba(10,16,32,0.72)",
+        backdropFilter: "blur(6px)",
+        animation: "ccFadeIn 0.22s ease",
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl"
+        style={{
+          background: "white",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.38)",
+          animation: "ccSlideUp 0.28s cubic-bezier(0.25,0.46,0.45,0.94)",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Gold accent bar */}
+        <div style={{ height: 4, background: "linear-gradient(90deg, #1a2744, #c9a96e)", borderRadius: "12px 12px 0 0" }} />
+
+        {/* Header */}
+        <div className="px-7 pt-6 pb-5 flex items-start justify-between gap-4" style={{ borderBottom: "1px solid #f3f0ea" }}>
+          <div className="flex items-center gap-4">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+              style={{ background: featured ? "linear-gradient(135deg,#1a2744,#243256)" : "linear-gradient(135deg,rgba(26,39,68,0.07),rgba(26,39,68,0.13))" }}
+            >
+              <Icon size={22} style={{ color: featured ? "#c9a96e" : "#1a2744" }} />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: "#c9a96e" }}>
+                {featured ? "Especialidad principal" : "Tratamiento"}
+              </p>
+              <h2 className="text-xl font-semibold" style={{ color: "#1a2744" }}>{title}</h2>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl flex-shrink-0 hover:bg-gray-100 transition-colors"
+            style={{ color: "#9ca3af" }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-7 py-6 space-y-6">
+          {/* Description */}
+          <p className="text-sm leading-relaxed" style={{ color: "#374151" }}>
+            {modal.description}
+          </p>
+
+          {/* Sections */}
+          {modal.sections.map(({ heading, items }) => (
+            <div key={heading}>
+              <p className="text-xs uppercase tracking-widest font-semibold mb-3" style={{ color: "#1a2744" }}>
+                {heading}
+              </p>
+              <div className="space-y-2">
+                {items.map(item => (
+                  <div key={item} className="flex items-start gap-3">
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{ background: "rgba(201,169,110,0.15)" }}
+                    >
+                      <CheckCircle size={11} style={{ color: "#c9a96e" }} />
+                    </div>
+                    <p className="text-sm" style={{ color: "#374151" }}>{item}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer CTA */}
+        <div className="px-7 pb-7">
+          <button
+            onClick={onContact}
+            className="w-full py-3.5 rounded-xl text-sm font-semibold tracking-wide transition-all"
+            style={{
+              background: "linear-gradient(135deg, #1a2744, #243256)",
+              color: "white",
+              boxShadow: "0 6px 20px rgba(26,39,68,0.25)",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = "1";    e.currentTarget.style.transform = "translateY(0)"; }}
+          >
+            Solicitar cita para {title}
+          </button>
+          <p className="text-xs text-center mt-3" style={{ color: "#9ca3af" }}>
+            Primera consulta sin compromiso · +34 932 041 069
+          </p>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes ccFadeIn  { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes ccSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.97) } to { opacity: 1; transform: translateY(0) scale(1) } }
+      `}</style>
+    </div>
+  );
+}
 
 const testimonials = [
   {
@@ -120,6 +292,7 @@ export default function Landing() {
   const [navSolid,       setNavSolid]       = useState(false);
   const [heroImgY,       setHeroImgY]       = useState(0);
   const [hoveredCard,    setHoveredCard]    = useState(null);
+  const [activeModal,    setActiveModal]    = useState(null);
 
   /* combined scroll handler */
   const lastScrollY = useRef(0);
@@ -538,7 +711,8 @@ export default function Landing() {
                     {desc}
                   </p>
                   <button
-                    className="mt-6 text-xs font-semibold uppercase tracking-wider"
+                    onClick={() => setActiveModal({ icon, title, featured, modal })}
+                    className="mt-6 text-xs font-semibold uppercase tracking-wider self-start"
                     style={{
                       color: featured ? "#c9a96e" : "#1a2744",
                       transition: "opacity 0.2s ease",
@@ -811,6 +985,20 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ════════════════════════════════════════════════════════
+          TREATMENT MODAL
+      ════════════════════════════════════════════════════════ */}
+      {activeModal && (
+        <TreatmentModal
+          treatment={activeModal}
+          onClose={() => setActiveModal(null)}
+          onContact={() => {
+            setActiveModal(null);
+            scrollTo(contactRef);
+          }}
+        />
+      )}
 
       {/* ════════════════════════════════════════════════════════
           FOOTER
