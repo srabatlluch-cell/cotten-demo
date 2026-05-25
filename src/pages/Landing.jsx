@@ -54,6 +54,7 @@ const treatments = [
     icon: Zap,
     title: "Implantología Basal",
     tag: "Especialidad principal",
+    slug: "implantologia-basal",
     desc: "Técnica avanzada con implantes de carga inmediata. Recupere su sonrisa en 72 horas con resultados permanentes y sin necesidad de injertos óseos.",
     featured: true,
     modal: {
@@ -83,6 +84,7 @@ const treatments = [
     icon: Activity,
     title: "Periodoncia",
     tag: "Salud gingival",
+    slug: "periodoncia",
     desc: "Tratamiento integral de enfermedades periodontales para recuperar y mantener la salud de sus encías con las técnicas más actuales.",
     featured: false,
     modal: {
@@ -112,6 +114,7 @@ const treatments = [
     icon: Smile,
     title: "Ortodoncia",
     tag: "Alineación dental",
+    slug: "ortodoncia",
     desc: "Brackets estéticos y alineadores invisibles para corregir la posición de sus dientes con total comodidad y discreción.",
     featured: false,
     modal: {
@@ -141,6 +144,7 @@ const treatments = [
     icon: Sparkles,
     title: "Estética Dental",
     tag: "Sonrisa perfecta",
+    slug: "estetica-dental",
     desc: "Blanqueamiento profesional, carillas de porcelana y diseño de sonrisa para una apariencia natural y radiante.",
     featured: false,
     modal: {
@@ -494,7 +498,6 @@ export default function Landing() {
   const [navSolid,       setNavSolid]       = useState(false);
   const [heroImgY,       setHeroImgY]       = useState(0);
   const [hoveredCard,    setHoveredCard]    = useState(null);
-  const [activeModal,    setActiveModal]    = useState(null);
 
   /* combined scroll handler */
   const lastScrollY = useRef(0);
@@ -868,7 +871,7 @@ export default function Landing() {
 
           {/* Cards — staggered fade up */}
           <div ref={treatGridRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {treatments.map(({ icon: Icon, title, tag, desc, featured, modal }, i) => (
+            {treatments.map(({ icon: Icon, title, tag, desc, featured, slug }, i) => (
               <div
                 key={title}
                 className={featured ? "md:col-span-2 lg:col-span-2" : ""}
@@ -913,7 +916,7 @@ export default function Landing() {
                     {desc}
                   </p>
                   <button
-                    onClick={() => setActiveModal({ icon: Icon, title, featured, modal })}
+                    onClick={() => navigate(`/tratamientos/${slug}`)}
                     className="mt-6 text-xs font-semibold uppercase tracking-wider self-start"
                     style={{
                       color: featured ? "#c9a96e" : "#1a2744",
@@ -1187,20 +1190,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
-      {/* ════════════════════════════════════════════════════════
-          TREATMENT MODAL
-      ════════════════════════════════════════════════════════ */}
-      {activeModal && (
-        <TreatmentModal
-          treatment={activeModal}
-          onClose={() => setActiveModal(null)}
-          onContact={() => {
-            setActiveModal(null);
-            scrollTo(contactRef);
-          }}
-        />
-      )}
 
       {/* ════════════════════════════════════════════════════════
           FOOTER
