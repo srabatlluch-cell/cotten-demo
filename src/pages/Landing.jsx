@@ -666,7 +666,7 @@ export default function Landing() {
 
           {/* Cards — staggered fade up */}
           <div ref={treatGridRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {treatments.map(({ icon: Icon, title, tag, desc, featured }, i) => (
+            {treatments.map(({ icon: Icon, title, tag, desc, featured, modal }, i) => (
               <div
                 key={title}
                 className={featured ? "md:col-span-2 lg:col-span-2" : ""}
@@ -711,7 +711,7 @@ export default function Landing() {
                     {desc}
                   </p>
                   <button
-                    onClick={() => setActiveModal({ icon, title, featured, modal })}
+                    onClick={() => setActiveModal({ icon: Icon, title, featured, modal })}
                     className="mt-6 text-xs font-semibold uppercase tracking-wider self-start"
                     style={{
                       color: featured ? "#c9a96e" : "#1a2744",
