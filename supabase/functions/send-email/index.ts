@@ -2,7 +2,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-// Set RESEND_FROM secret to your verified Resend sender, e.g. "Clínica Cotten <noreply@yourdomain.com>"
 const FROM = Deno.env.get("RESEND_FROM") ?? "Clínica Cotten <onboarding@resend.dev>";
 
 const corsHeaders = {
@@ -15,23 +14,40 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  console.log("[send-email] request received:", req.method, req.url);
+
   try {
     if (!RESEND_API_KEY) {
+      console.error("[send-email] RESEND_API_KEY secret is not set in Supabase");
       return new Response(JSON.stringify({ error: "RESEND_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { to, subject, html } = await req.json();
+    let body: { to?: string; subject?: string; html?: string };
+    try {
+      body = await req.json();
+    } catch (parseErr) {
+      console.error("[send-email] failed to parse request body:", parseErr);
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { to, subject, html } = body;
+    console.log("[send-email] to:", to, "| subject:", subject);
 
     if (!to || !subject || !html) {
+      console.error("[send-email] missing fields — to:", to, "subject:", subject, "html length:", html?.length);
       return new Response(JSON.stringify({ error: "Missing required fields: to, subject, html" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    console.log("[send-email] calling Resend API, from:", FROM);
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -42,8 +58,10 @@ serve(async (req: Request) => {
     });
 
     const data = await res.json();
+    console.log("[send-email] Resend response status:", res.status, "| data:", JSON.stringify(data));
 
     if (!res.ok) {
+      console.error("[send-email] Resend API error:", JSON.stringify(data));
       return new Response(JSON.stringify({ error: data }), {
         status: res.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -56,6 +74,7 @@ serve(async (req: Request) => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error("[send-email] unhandled exception:", message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,14 +1,40 @@
-import { supabase } from "./supabase";
-
 const PORTAL_URL = "https://cotten-demo.vercel.app";
 
-// ─── base send (via Supabase Edge Function to avoid CORS) ─────────────────────
+const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const EDGE_FN_URL      = `${SUPABASE_URL}/functions/v1/send-email`;
+
+// ─── base send (direct fetch → Supabase Edge Function → Resend) ──────────────
 
 async function send({ to, subject, html }) {
-  const { data, error } = await supabase.functions.invoke("send-email", {
-    body: { to, subject, html },
-  });
-  if (error) throw error;
+  console.log("[email] calling Edge Function:", EDGE_FN_URL, "→ to:", to);
+
+  let res;
+  try {
+    res = await fetch(EDGE_FN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey":        SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ to, subject, html }),
+    });
+  } catch (networkErr) {
+    console.error("[email] network error (Edge Function unreachable):", networkErr);
+    throw networkErr;
+  }
+
+  console.log("[email] response status:", res.status);
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error("[email] error response body:", body);
+    throw new Error(`Email service error (${res.status}): ${body}`);
+  }
+
+  const data = await res.json();
+  console.log("[email] sent successfully:", data);
   return data;
 }
 
