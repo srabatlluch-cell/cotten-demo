@@ -357,7 +357,7 @@ export async function sendPaymentReminder({
 
 // ─── 8. Contact form (landing page) ──────────────────────────────────────────
 
-const CLINIC_EMAIL = "onboarding@resend.dev";
+const CLINIC_EMAIL = "srabatlluch@gmail.com";
 
 export async function sendContactForm({ nombre, apellidos, email, telefono, mensaje }) {
   const fullName = `${nombre} ${apellidos}`.trim();
@@ -417,8 +417,10 @@ export async function sendContactForm({ nombre, apellidos, email, telefono, mens
       </table>`,
   });
 
-  await Promise.all([
-    send({ to: CLINIC_EMAIL, subject: `Nueva solicitud de cita - ${fullName}`, html: clinicHtml }),
-    send({ to: email,        subject: "Hemos recibido su solicitud - Clínica Cotten",   html: confirmHtml }),
-  ]);
+  // Clinic notification is mandatory — must succeed
+  await send({ to: CLINIC_EMAIL, subject: `Nueva solicitud de cita - ${fullName}`, html: clinicHtml });
+
+  // Patient confirmation: best-effort (fails silently in Resend test mode until domain is verified)
+  send({ to: email, subject: "Hemos recibido su solicitud - Clínica Cotten", html: confirmHtml })
+    .catch(err => console.warn("[email] patient confirmation skipped (Resend domain not verified):", err.message));
 }
