@@ -3,7 +3,9 @@ import { useRef, useState, useEffect } from "react";
 import {
   MapPin, Phone, Clock, Shield, Award, Star,
   Zap, Activity, Smile, Sparkles, ChevronDown,
-  CheckCircle, Globe, Menu, X,
+  CheckCircle, Globe, Menu, X, ArrowRight,
+  Heart, Users, Target, Timer, Stethoscope,
+  Microscope, Layers, CalendarCheck, ScanLine,
 } from "lucide-react";
 
 /* ── Images ───────────────────────────────────────────────── */
@@ -55,16 +57,25 @@ const treatments = [
     desc: "Técnica avanzada con implantes de carga inmediata. Recupere su sonrisa en 72 horas con resultados permanentes y sin necesidad de injertos óseos.",
     featured: true,
     modal: {
-      description: "La implantología basal es una técnica revolucionaria que permite colocar implantes dentales en pacientes que han perdido hueso, sin necesidad de injertos óseos previos. El Dr. Philippe Cotten es pionero en España con más de 27 años de experiencia.",
-      sections: [
-        {
-          heading: "Ventajas",
-          items: ["Sin injerto óseo", "Carga inmediata — dientes en 72 h", "Apto para pacientes con hueso insuficiente", "Alta tasa de éxito"],
-        },
-        {
-          heading: "¿Para quién?",
-          items: ["Pacientes con pérdida ósea severa", "Pacientes que han fracasado con implantes convencionales", "Pacientes edéntulos totales"],
-        },
+      headline: "Recupere su sonrisa en 72 horas. Sin injertos. Sin esperas.",
+      description: "La implantología basal es la técnica más avanzada para rehabilitar bocas con pérdida ósea severa. A diferencia de los implantes convencionales, los implantes basales se anclan en el hueso cortical, lo que elimina la necesidad de injertos y permite la carga inmediata. El Dr. Philippe Cotten introdujo esta técnica en España en 2004 y ha realizado más de 3.000 implantes con una tasa de éxito del 98%.",
+      benefits: [
+        { icon: Shield,       title: "Sin injerto óseo",          desc: "Válido para pacientes con hueso insuficiente donde los implantes convencionales fallan." },
+        { icon: Zap,          title: "Carga inmediata",           desc: "Dientes provisionales fijos en 72 horas. No hay período sin dientes." },
+        { icon: Award,        title: "Pioneros en España",        desc: "Dr. Cotten introdujo la técnica en 2004. Más experiencia que ningún otro centro en España." },
+        { icon: CheckCircle,  title: "98% tasa de éxito",         desc: "Más de 3.000 implantes colocados con resultados documentados a largo plazo." },
+      ],
+      steps: [
+        { title: "TAC 3D y diagnóstico",         desc: "Escáner de haz cónico para analizar el hueso disponible y planificar cada implante con precisión milimétrica." },
+        { title: "Planificación digital",         desc: "Software 3D permite visualizar el resultado final antes de la cirugía y diseñar la prótesis con antelación." },
+        { title: "Cirugía en una sola sesión",    desc: "Los implantes basales se colocan en una intervención ambulatoria bajo anestesia local o sedación consciente." },
+        { title: "Dientes en 72 horas",           desc: "La prótesis provisional fija se instala en los días siguientes. Usted sale con dientes funcionales." },
+      ],
+      stats: [
+        { value: "27+",   label: "años de experiencia" },
+        { value: "3.000+",label: "implantes colocados"  },
+        { value: "98%",   label: "tasa de éxito"        },
+        { value: "72 h",  label: "hasta tener dientes"  },
       ],
     },
   },
@@ -75,16 +86,25 @@ const treatments = [
     desc: "Tratamiento integral de enfermedades periodontales para recuperar y mantener la salud de sus encías con las técnicas más actuales.",
     featured: false,
     modal: {
-      description: "Tratamiento especializado de las enfermedades de las encías y los tejidos de soporte dental. Prevenimos y tratamos la periodontitis para mantener la salud de tus encías y conservar tus dientes naturales.",
-      sections: [
-        {
-          heading: "Tratamientos",
-          items: ["Limpieza profesional profunda", "Raspado y alisado radicular", "Cirugía periodontal", "Mantenimiento periodontal"],
-        },
-        {
-          heading: "Señales de alerta",
-          items: ["Encías que sangran", "Mal aliento persistente", "Dientes que se mueven", "Encías retraídas"],
-        },
+      headline: "Sus encías sanas son la base de una boca sana para siempre.",
+      description: "La periodontitis afecta al 50% de los adultos y es la principal causa de pérdida dental. Nuestro servicio de periodoncia combina diagnóstico de precisión con tratamientos mínimamente invasivos para detener la enfermedad, eliminar la infección y devolver la salud a sus encías — preservando al máximo sus dientes naturales.",
+      benefits: [
+        { icon: Microscope,   title: "Diagnóstico de precisión",  desc: "Sondaje periodontal completo y radiografías periapicales para mapear el estado exacto de cada diente." },
+        { icon: Heart,        title: "Preservamos sus dientes",   desc: "El objetivo siempre es conservar los dientes naturales. La extracción es el último recurso." },
+        { icon: Shield,       title: "Tratamiento sin cirugía",   desc: "En fases iniciales y moderadas resolvemos el problema con raspado profesional sin necesidad de operar." },
+        { icon: CalendarCheck,title: "Mantenimiento continuo",    desc: "Programa de revisiones periódicas para controlar la enfermedad y prevenir recaídas a largo plazo." },
+      ],
+      steps: [
+        { title: "Exploración periodontal",        desc: "Medición de las bolsas periodontales, análisis radiológico y evaluación del nivel óseo en cada zona." },
+        { title: "Plan personalizado",             desc: "Según la severidad establecemos si el tratamiento es conservador, quirúrgico o de mantenimiento." },
+        { title: "Fase activa: raspado y curetaje",desc: "Eliminación del sarro subgingival y bacterias con ultrasonidos y curetas. Cómodo, efectivo y sin cirugía en la mayoría de casos." },
+        { title: "Seguimiento y mantenimiento",    desc: "Revisiones cada 3-6 meses para mantener los resultados y detectar cualquier recidiva a tiempo." },
+      ],
+      stats: [
+        { value: "50%",  label: "adultos afectados"       },
+        { value: "1ª",   label: "causa de pérdida dental" },
+        { value: "90%",  label: "casos sin cirugía"       },
+        { value: "100%", label: "personalizado"           },
       ],
     },
   },
@@ -95,16 +115,25 @@ const treatments = [
     desc: "Brackets estéticos y alineadores invisibles para corregir la posición de sus dientes con total comodidad y discreción.",
     featured: false,
     modal: {
-      description: "Corregimos la posición de tus dientes y mandíbula para conseguir una sonrisa perfecta y una mordida funcional. Disponemos de ortodoncia tradicional y alineadores invisibles.",
-      sections: [
-        {
-          heading: "Opciones disponibles",
-          items: ["Brackets metálicos", "Brackets estéticos (cerámica)", "Alineadores invisibles (Invisalign)", "Ortodoncia lingual"],
-        },
-        {
-          heading: "¿Quién puede tratarse?",
-          items: ["Adultos, niños y adolescentes", "Casos leves y complejos", "Compatible con otros tratamientos dentales"],
-        },
+      headline: "La sonrisa que siempre quisiste, a cualquier edad.",
+      description: "La ortodoncia moderna va mucho más allá de la estética: una mordida correcta protege el esmalte, evita el desgaste y mejora la función masticatoria. En Clínica Cotten trabajamos con las técnicas más avanzadas — desde brackets de cerámica hasta alineadores Invisalign — adaptándonos a cada paciente, adulto o niño, para lograr resultados precisos y duraderos.",
+      benefits: [
+        { icon: ScanLine,     title: "Planificación 3D",          desc: "Escáner intraoral y software de simulación para ver el resultado final antes de empezar el tratamiento." },
+        { icon: Layers,       title: "Todas las opciones",        desc: "Brackets metálicos, estéticos de cerámica, lingual y alineadores Invisalign. Elegimos juntos lo mejor para ti." },
+        { icon: Users,        title: "Para todas las edades",     desc: "Tratamos niños desde los 7 años, adolescentes y adultos sin límite de edad con protocolos específicos." },
+        { icon: Target,       title: "Resultados predecibles",    desc: "La planificación digital elimina sorpresas. Sabemos de antemano la posición final de cada diente." },
+      ],
+      steps: [
+        { title: "Estudio ortodóncico",            desc: "Escáner 3D, fotografías y análisis cefalométrico para entender exactamente qué necesita tu mordida." },
+        { title: "Simulación del resultado",       desc: "Visualizas en pantalla cómo quedará tu sonrisa antes de decidir. Sin compromiso hasta tu aprobación." },
+        { title: "Inicio del tratamiento",         desc: "Colocación de brackets o entrega de alineadores. Primera semana de adaptación totalmente guiada." },
+        { title: "Ajustes y retención",            desc: "Visitas periódicas cada 4-8 semanas. Finalizado el tratamiento, retenedores para mantener el resultado de por vida." },
+      ],
+      stats: [
+        { value: "7+",    label: "años en adelante"     },
+        { value: "18-24", label: "meses de media"       },
+        { value: "3D",    label: "planificación digital" },
+        { value: "∞",     label: "retención garantizada" },
       ],
     },
   },
@@ -115,24 +144,33 @@ const treatments = [
     desc: "Blanqueamiento profesional, carillas de porcelana y diseño de sonrisa para una apariencia natural y radiante.",
     featured: false,
     modal: {
-      description: "Transformamos tu sonrisa con los últimos avances en estética dental. Desde un blanqueamiento hasta un cambio completo de imagen con carillas de porcelana.",
-      sections: [
-        {
-          heading: "Tratamientos",
-          items: ["Blanqueamiento dental profesional", "Carillas de porcelana", "Composite dental", "Diseño de sonrisa digital"],
-        },
-        {
-          heading: "Resultado",
-          items: ["Sonrisas naturales y duraderas adaptadas a tu rostro", "Tratamientos mínimamente invasivos", "Resultados visibles desde la primera sesión"],
-        },
+      headline: "Una sonrisa diseñada para ti que dura toda la vida.",
+      description: "La estética dental contemporánea no se trata de tener los dientes más blancos, sino de una sonrisa armoniosa que encaje con tus rasgos y te haga sentir seguro/a. En Clínica Cotten partimos de un análisis facial completo y diseño digital para definir con exactitud el resultado antes de tocar ningún diente. Cada tratamiento es único.",
+      benefits: [
+        { icon: Sparkles,     title: "Diseño de sonrisa digital",  desc: "Software de diseño facial nos permite previsualizar el resultado exacto adaptado a tu cara antes de cualquier intervención." },
+        { icon: Star,         title: "Carillas de porcelana",      desc: "Láminas cerámicas ultrafinas (0,3 mm) que transforman color, forma y tamaño sin desgastar el diente natural." },
+        { icon: Zap,          title: "Blanqueamiento profesional", desc: "Sistemas activados con luz LED de última generación. Hasta 8 tonos más en una sola sesión de 90 minutos." },
+        { icon: Award,        title: "Resultado natural",          desc: "Materiales cerámicos de alta tecnología que imitan la translucidez del esmalte natural. Nadie sabrá que son carillas." },
+      ],
+      steps: [
+        { title: "Análisis facial y fotográfico",  desc: "Fotografías clínicas de alta resolución y análisis de proporciones faciales para diseñar una sonrisa armoniosa." },
+        { title: "Diseño digital de la sonrisa",   desc: "Simulación en pantalla del resultado final. Apruebas cada detalle — forma, color, tamaño — antes de empezar." },
+        { title: "Mock-up en boca",                desc: "Prueba provisional en resina para que compruebes en el espejo el aspecto real antes de las carillas definitivas." },
+        { title: "Transformación definitiva",      desc: "Colocación de las carillas o composite definitivo. Resultado inmediato, duradero y 100% natural." },
+      ],
+      stats: [
+        { value: "1",     label: "sesión para blanquear" },
+        { value: "15+",   label: "años duran las carillas"},
+        { value: "0,3 mm",label: "grosor de la carilla"  },
+        { value: "8",     label: "tonos más en una visita"},
       ],
     },
   },
 ];
 
-/* ── Treatment modal ──────────────────────────────────────── */
+/* ── Treatment modal (full-screen, two-column) ────────────── */
 function TreatmentModal({ treatment, onClose, onContact }) {
-  const { icon: Icon, title, featured, modal } = treatment;
+  const { icon: Icon, title, tag, featured, modal } = treatment;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -146,105 +184,209 @@ function TreatmentModal({ treatment, onClose, onContact }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      style={{
-        background: "rgba(10,16,32,0.72)",
-        backdropFilter: "blur(6px)",
-        animation: "ccFadeIn 0.22s ease",
-      }}
+      className="fixed inset-0 z-[100] flex"
+      style={{ background: "rgba(8,14,28,0.80)", backdropFilter: "blur(8px)", animation: "ccFadeIn 0.2s ease" }}
       onClick={onClose}
     >
+      {/* Modal shell — full height, max 1100 px wide, centered */}
       <div
-        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl"
+        className="relative m-auto w-full flex flex-col lg:flex-row overflow-hidden"
         style={{
-          background: "white",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.38)",
-          animation: "ccSlideUp 0.28s cubic-bezier(0.25,0.46,0.45,0.94)",
+          maxWidth: 1060,
+          maxHeight: "92vh",
+          borderRadius: 24,
+          boxShadow: "0 40px 100px rgba(0,0,0,0.55)",
+          animation: "ccSlideUp 0.30s cubic-bezier(0.22,0.8,0.35,1)",
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Gold accent bar */}
-        <div style={{ height: 4, background: "linear-gradient(90deg, #1a2744, #c9a96e)", borderRadius: "12px 12px 0 0" }} />
 
-        {/* Header */}
-        <div className="px-7 pt-6 pb-5 flex items-start justify-between gap-4" style={{ borderBottom: "1px solid #f3f0ea" }}>
-          <div className="flex items-center gap-4">
-            <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-              style={{ background: featured ? "linear-gradient(135deg,#1a2744,#243256)" : "linear-gradient(135deg,rgba(26,39,68,0.07),rgba(26,39,68,0.13))" }}
-            >
-              <Icon size={22} style={{ color: featured ? "#c9a96e" : "#1a2744" }} />
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: "#c9a96e" }}>
-                {featured ? "Especialidad principal" : "Tratamiento"}
-              </p>
-              <h2 className="text-xl font-semibold" style={{ color: "#1a2744" }}>{title}</h2>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl flex-shrink-0 hover:bg-gray-100 transition-colors"
-            style={{ color: "#9ca3af" }}
+        {/* ── LEFT PANEL — navy, fixed visual ─────────────────── */}
+        <div
+          className="relative flex flex-col justify-between overflow-hidden flex-shrink-0"
+          style={{
+            width: "100%",
+            background: "linear-gradient(155deg, #0d1526 0%, #1a2744 55%, #1e2f50 100%)",
+            padding: "40px 36px",
+            minHeight: 220,
+          }}
+        >
+          {/* Large decorative icon behind content */}
+          <div
+            className="absolute"
+            style={{ bottom: -20, right: -20, opacity: 0.06, pointerEvents: "none" }}
           >
-            <X size={18} />
-          </button>
+            <Icon size={220} style={{ color: "#c9a96e" }} />
+          </div>
+          {/* Gold diagonal stripe */}
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(135deg, transparent 60%, rgba(201,169,110,0.07) 100%)", pointerEvents: "none" }}
+          />
+
+          {/* Top: tag + title */}
+          <div className="relative z-10">
+            <div
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-widest mb-5"
+              style={{ background: "rgba(201,169,110,0.15)", border: "1px solid rgba(201,169,110,0.30)", color: "#c9a96e" }}
+            >
+              <Icon size={11} />
+              {tag}
+            </div>
+
+            <h2
+              className="font-light text-white mb-3 leading-tight"
+              style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)" }}
+            >
+              {title}
+            </h2>
+            {/* Gold divider line */}
+            <div style={{ width: 48, height: 3, background: "linear-gradient(90deg,#c9a96e,rgba(201,169,110,0.3))", borderRadius: 2, marginBottom: 20 }} />
+
+            <p
+              className="font-medium leading-snug"
+              style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.95rem", maxWidth: 320 }}
+            >
+              {modal.headline}
+            </p>
+          </div>
+
+          {/* Bottom: stats bar */}
+          <div
+            className="relative z-10 grid grid-cols-2 gap-3 mt-8 lg:mt-0"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.10)", paddingTop: 24 }}
+          >
+            {modal.stats.map(({ value, label }) => (
+              <div key={label}>
+                <p className="font-bold leading-none mb-1" style={{ color: "#c9a96e", fontSize: "1.45rem" }}>{value}</p>
+                <p style={{ color: "rgba(255,255,255,0.40)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em" }}>{label}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Body */}
-        <div className="px-7 py-6 space-y-6">
-          {/* Description */}
-          <p className="text-sm leading-relaxed" style={{ color: "#374151" }}>
-            {modal.description}
-          </p>
+        {/* ── RIGHT PANEL — white, scrollable content ─────────── */}
+        <div
+          className="relative flex flex-col overflow-y-auto flex-1 bg-white"
+          style={{ minWidth: 0 }}
+        >
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-5 right-5 z-20 flex items-center justify-center rounded-xl transition-colors"
+            style={{ width: 36, height: 36, background: "#f5f3f0", color: "#6b7280" }}
+            onMouseEnter={e => e.currentTarget.style.background = "#e8e2d9"}
+            onMouseLeave={e => e.currentTarget.style.background = "#f5f3f0"}
+          >
+            <X size={16} />
+          </button>
 
-          {/* Sections */}
-          {modal.sections.map(({ heading, items }) => (
-            <div key={heading}>
-              <p className="text-xs uppercase tracking-widest font-semibold mb-3" style={{ color: "#1a2744" }}>
-                {heading}
-              </p>
-              <div className="space-y-2">
-                {items.map(item => (
-                  <div key={item} className="flex items-start gap-3">
+          <div style={{ padding: "36px 36px 0" }}>
+            {/* Description */}
+            <p style={{ color: "#374151", fontSize: "0.875rem", lineHeight: 1.75, marginBottom: 32 }}>
+              {modal.description}
+            </p>
+
+            {/* Por qué elegirnos */}
+            <div style={{ marginBottom: 32 }}>
+              <div className="flex items-center gap-3 mb-5">
+                <div style={{ width: 3, height: 18, background: "linear-gradient(180deg,#c9a96e,rgba(201,169,110,0.3))", borderRadius: 2, flexShrink: 0 }} />
+                <p style={{ color: "#1a2744", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em" }}>
+                  Por qué elegirnos
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {modal.benefits.map(({ icon: BIcon, title: btitle, desc }) => (
+                  <div
+                    key={btitle}
+                    className="flex gap-3 rounded-2xl p-4"
+                    style={{ background: "#faf9f7", border: "1px solid #f0ece6" }}
+                  >
                     <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ background: "rgba(201,169,110,0.15)" }}
+                      className="flex items-center justify-center rounded-xl flex-shrink-0"
+                      style={{ width: 38, height: 38, background: "linear-gradient(135deg,#1a2744,#243256)" }}
                     >
-                      <CheckCircle size={11} style={{ color: "#c9a96e" }} />
+                      <BIcon size={16} style={{ color: "#c9a96e" }} />
                     </div>
-                    <p className="text-sm" style={{ color: "#374151" }}>{item}</p>
+                    <div>
+                      <p style={{ color: "#1a2744", fontSize: "0.8rem", fontWeight: 700, marginBottom: 3 }}>{btitle}</p>
+                      <p style={{ color: "#6b7280", fontSize: "0.75rem", lineHeight: 1.6 }}>{desc}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-          ))}
-        </div>
 
-        {/* Footer CTA */}
-        <div className="px-7 pb-7">
-          <button
-            onClick={onContact}
-            className="w-full py-3.5 rounded-xl text-sm font-semibold tracking-wide transition-all"
-            style={{
-              background: "linear-gradient(135deg, #1a2744, #243256)",
-              color: "white",
-              boxShadow: "0 6px 20px rgba(26,39,68,0.25)",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = "1";    e.currentTarget.style.transform = "translateY(0)"; }}
+            {/* El proceso */}
+            <div style={{ marginBottom: 32 }}>
+              <div className="flex items-center gap-3 mb-5">
+                <div style={{ width: 3, height: 18, background: "linear-gradient(180deg,#c9a96e,rgba(201,169,110,0.3))", borderRadius: 2, flexShrink: 0 }} />
+                <p style={{ color: "#1a2744", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em" }}>
+                  El proceso
+                </p>
+              </div>
+              <div className="space-y-3">
+                {modal.steps.map(({ title: stitle, desc }, idx) => (
+                  <div key={stitle} className="flex gap-4">
+                    {/* Step number column */}
+                    <div className="flex flex-col items-center flex-shrink-0" style={{ width: 32 }}>
+                      <div
+                        className="flex items-center justify-center rounded-full font-bold flex-shrink-0"
+                        style={{ width: 32, height: 32, background: "linear-gradient(135deg,#c9a96e,#d9bc8a)", color: "#1a2744", fontSize: "0.8rem" }}
+                      >
+                        {idx + 1}
+                      </div>
+                      {idx < modal.steps.length - 1 && (
+                        <div style={{ width: 1, flex: 1, minHeight: 16, background: "linear-gradient(180deg,rgba(201,169,110,0.4),transparent)", marginTop: 4 }} />
+                      )}
+                    </div>
+                    {/* Step content */}
+                    <div style={{ paddingBottom: idx < modal.steps.length - 1 ? 12 : 0 }}>
+                      <p style={{ color: "#1a2744", fontSize: "0.82rem", fontWeight: 700, marginBottom: 3 }}>{stitle}</p>
+                      <p style={{ color: "#6b7280", fontSize: "0.78rem", lineHeight: 1.65 }}>{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky CTA footer */}
+          <div
+            className="sticky bottom-0"
+            style={{ background: "white", padding: "20px 36px 28px", borderTop: "1px solid #f0ece6" }}
           >
-            Solicitar cita para {title}
-          </button>
-          <p className="text-xs text-center mt-3" style={{ color: "#9ca3af" }}>
-            Primera consulta sin compromiso · +34 932 041 069
-          </p>
+            <button
+              onClick={onContact}
+              className="w-full flex items-center justify-center gap-3 rounded-2xl font-semibold tracking-wide transition-all"
+              style={{
+                padding: "15px 24px",
+                background: "linear-gradient(135deg,#c9a96e,#d9bc8a)",
+                color: "#1a2744",
+                fontSize: "0.9rem",
+                boxShadow: "0 8px 28px rgba(201,169,110,0.40)",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 14px 40px rgba(201,169,110,0.56)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)";    e.currentTarget.style.boxShadow = "0 8px 28px rgba(201,169,110,0.40)"; }}
+            >
+              Solicitar consulta gratuita
+              <ArrowRight size={16} />
+            </button>
+            <p style={{ textAlign: "center", fontSize: "0.72rem", color: "#9ca3af", marginTop: 10 }}>
+              Sin compromiso · Respuesta en menos de 24 h · +34 932 041 069
+            </p>
+          </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes ccFadeIn  { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes ccSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.97) } to { opacity: 1; transform: translateY(0) scale(1) } }
+        @keyframes ccFadeIn  { from { opacity:0 } to { opacity:1 } }
+        @keyframes ccSlideUp { from { opacity:0; transform:translateY(32px) scale(0.96) } to { opacity:1; transform:translateY(0) scale(1) } }
+
+        /* Left panel: full-width on mobile, fixed sidebar on desktop */
+        @media (min-width: 1024px) {
+          .cc-modal-left { width: 340px !important; }
+        }
       `}</style>
     </div>
   );
