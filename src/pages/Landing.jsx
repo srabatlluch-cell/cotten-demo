@@ -168,9 +168,9 @@ const treatments = [
   },
 ];
 
-/* ── Treatment modal (full-screen, two-column) ────────────── */
+/* ── Treatment modal (full-page style) ────────────────────── */
 function TreatmentModal({ treatment, onClose, onContact }) {
-  const { icon: Icon, title, tag, featured, modal } = treatment;
+  const { icon: Icon, title, tag, modal } = treatment;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -184,209 +184,269 @@ function TreatmentModal({ treatment, onClose, onContact }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex"
-      style={{ background: "rgba(8,14,28,0.80)", backdropFilter: "blur(8px)", animation: "ccFadeIn 0.2s ease" }}
-      onClick={onClose}
+      className="fixed inset-0 z-[100]"
+      style={{ background: "#faf9f7", animation: "ccFadeIn 0.22s ease", overflowY: "auto" }}
     >
-      {/* Modal shell — full height, max 1100 px wide, centered */}
+      {/* ── TOP BAR ── */}
       <div
-        className="relative m-auto w-full flex flex-col lg:flex-row overflow-hidden"
+        className="sticky top-0 z-10 flex items-center justify-between px-6 md:px-10"
         style={{
-          maxWidth: 1060,
-          maxHeight: "92vh",
-          borderRadius: 24,
-          boxShadow: "0 40px 100px rgba(0,0,0,0.55)",
-          animation: "ccSlideUp 0.30s cubic-bezier(0.22,0.8,0.35,1)",
+          height: 64,
+          background: "rgba(13,21,38,0.97)",
+          backdropFilter: "blur(14px)",
+          borderBottom: "1px solid rgba(201,169,110,0.18)",
         }}
-        onClick={e => e.stopPropagation()}
       >
-
-        {/* ── LEFT PANEL — navy, fixed visual ─────────────────── */}
-        <div
-          className="relative flex flex-col justify-between overflow-hidden flex-shrink-0"
-          style={{
-            width: "100%",
-            background: "linear-gradient(155deg, #0d1526 0%, #1a2744 55%, #1e2f50 100%)",
-            padding: "40px 36px",
-            minHeight: 220,
-          }}
-        >
-          {/* Large decorative icon behind content */}
+        {/* Logo */}
+        <div className="flex items-center gap-3">
           <div
-            className="absolute"
-            style={{ bottom: -20, right: -20, opacity: 0.06, pointerEvents: "none" }}
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: "linear-gradient(135deg,#c9a96e,#d9bc8a)" }}
           >
-            <Icon size={220} style={{ color: "#c9a96e" }} />
+            <span style={{ color: "white", fontWeight: 700, fontSize: 11 }}>CC</span>
           </div>
-          {/* Gold diagonal stripe */}
+          <div>
+            <p style={{ color: "rgba(255,255,255,0.85)", fontWeight: 600, fontSize: "0.85rem", lineHeight: 1.2 }}>Clínica Cotten</p>
+            <p style={{ color: "#c9a96e", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.10em" }}>Barcelona · Odontología Avanzada</p>
+          </div>
+        </div>
+
+        {/* Treatment chip — center */}
+        <div
+          className="hidden sm:flex items-center gap-2 px-4 py-1.5 rounded-full"
+          style={{ background: "rgba(201,169,110,0.12)", border: "1px solid rgba(201,169,110,0.25)" }}
+        >
+          <Icon size={12} style={{ color: "#c9a96e" }} />
+          <span style={{ color: "#c9a96e", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em" }}>{tag}</span>
+        </div>
+
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl"
+          style={{
+            background: "rgba(255,255,255,0.07)",
+            border: "1px solid rgba(255,255,255,0.14)",
+            color: "rgba(255,255,255,0.65)",
+            fontSize: "0.78rem",
+            transition: "background 0.2s ease, color 0.2s ease",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.14)"; e.currentTarget.style.color="white"; }}
+          onMouseLeave={e => { e.currentTarget.style.background="rgba(255,255,255,0.07)"; e.currentTarget.style.color="rgba(255,255,255,0.65)"; }}
+        >
+          <X size={14} />
+          Cerrar
+        </button>
+      </div>
+
+      {/* ── HERO BAND ── */}
+      <div
+        className="relative overflow-hidden"
+        style={{ background: "linear-gradient(135deg,#0d1526 0%,#1a2744 55%,#1e3058 100%)", padding: "72px 24px 60px" }}
+      >
+        {/* Giant decorative icon */}
+        <div className="absolute" style={{ right: -30, top: -30, opacity: 0.05, pointerEvents: "none" }}>
+          <Icon size={380} style={{ color: "#c9a96e" }} />
+        </div>
+        {/* Diagonal gold band */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(125deg,transparent 55%,rgba(201,169,110,0.06) 100%)", pointerEvents: "none" }} />
+
+        <div className="relative max-w-4xl mx-auto">
+          {/* Tag pill */}
           <div
-            className="absolute inset-0"
-            style={{ background: "linear-gradient(135deg, transparent 60%, rgba(201,169,110,0.07) 100%)", pointerEvents: "none" }}
-          />
-
-          {/* Top: tag + title */}
-          <div className="relative z-10">
-            <div
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-widest mb-5"
-              style={{ background: "rgba(201,169,110,0.15)", border: "1px solid rgba(201,169,110,0.30)", color: "#c9a96e" }}
-            >
-              <Icon size={11} />
-              {tag}
-            </div>
-
-            <h2
-              className="font-light text-white mb-3 leading-tight"
-              style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)" }}
-            >
-              {title}
-            </h2>
-            {/* Gold divider line */}
-            <div style={{ width: 48, height: 3, background: "linear-gradient(90deg,#c9a96e,rgba(201,169,110,0.3))", borderRadius: 2, marginBottom: 20 }} />
-
-            <p
-              className="font-medium leading-snug"
-              style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.95rem", maxWidth: 320 }}
-            >
-              {modal.headline}
-            </p>
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6"
+            style={{ background: "rgba(201,169,110,0.12)", border: "1px solid rgba(201,169,110,0.28)", color: "#c9a96e", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em" }}
+          >
+            <Icon size={12} />
+            {tag}
           </div>
 
-          {/* Bottom: stats bar */}
+          {/* Title */}
+          <h1
+            className="text-white font-light leading-tight mb-4"
+            style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)" }}
+          >
+            {title}
+          </h1>
+
+          {/* Gold rule */}
+          <div style={{ width: 56, height: 3, background: "linear-gradient(90deg,#c9a96e,rgba(201,169,110,0.2))", borderRadius: 2, marginBottom: 24 }} />
+
+          {/* Headline */}
+          <p
+            className="leading-relaxed mb-10"
+            style={{ color: "rgba(255,255,255,0.62)", fontSize: "clamp(1rem, 2vw, 1.18rem)", maxWidth: 560 }}
+          >
+            {modal.headline}
+          </p>
+
+          {/* Stats row */}
           <div
-            className="relative z-10 grid grid-cols-2 gap-3 mt-8 lg:mt-0"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.10)", paddingTop: 24 }}
+            className="grid grid-cols-2 md:grid-cols-4 gap-6"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.10)", paddingTop: 36 }}
           >
             {modal.stats.map(({ value, label }) => (
               <div key={label}>
-                <p className="font-bold leading-none mb-1" style={{ color: "#c9a96e", fontSize: "1.45rem" }}>{value}</p>
-                <p style={{ color: "rgba(255,255,255,0.40)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em" }}>{label}</p>
+                <p style={{ color: "#c9a96e", fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 700, lineHeight: 1, marginBottom: 6 }}>
+                  {value}
+                </p>
+                <p style={{ color: "rgba(255,255,255,0.38)", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.09em" }}>
+                  {label}
+                </p>
               </div>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* ── RIGHT PANEL — white, scrollable content ─────────── */}
-        <div
-          className="relative flex flex-col overflow-y-auto flex-1 bg-white"
-          style={{ minWidth: 0 }}
-        >
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            className="absolute top-5 right-5 z-20 flex items-center justify-center rounded-xl transition-colors"
-            style={{ width: 36, height: 36, background: "#f5f3f0", color: "#6b7280" }}
-            onMouseEnter={e => e.currentTarget.style.background = "#e8e2d9"}
-            onMouseLeave={e => e.currentTarget.style.background = "#f5f3f0"}
-          >
-            <X size={16} />
-          </button>
+      {/* ── DESCRIPTION ── */}
+      <div style={{ background: "white", padding: "56px 24px" }}>
+        <div className="max-w-4xl mx-auto">
+          <p style={{ color: "#374151", fontSize: "1.05rem", lineHeight: 1.85, maxWidth: 680 }}>
+            {modal.description}
+          </p>
+        </div>
+      </div>
 
-          <div style={{ padding: "36px 36px 0" }}>
-            {/* Description */}
-            <p style={{ color: "#374151", fontSize: "0.875rem", lineHeight: 1.75, marginBottom: 32 }}>
-              {modal.description}
+      {/* ── POR QUÉ ELEGIRNOS ── */}
+      <div style={{ background: "#faf9f7", padding: "56px 24px" }}>
+        <div className="max-w-4xl mx-auto">
+          {/* Section label */}
+          <div className="flex items-center gap-3 mb-10">
+            <div style={{ width: 3, height: 22, background: "linear-gradient(180deg,#c9a96e,rgba(201,169,110,0.2))", borderRadius: 2 }} />
+            <p style={{ color: "#1a2744", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+              Por qué elegirnos
             </p>
-
-            {/* Por qué elegirnos */}
-            <div style={{ marginBottom: 32 }}>
-              <div className="flex items-center gap-3 mb-5">
-                <div style={{ width: 3, height: 18, background: "linear-gradient(180deg,#c9a96e,rgba(201,169,110,0.3))", borderRadius: 2, flexShrink: 0 }} />
-                <p style={{ color: "#1a2744", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em" }}>
-                  Por qué elegirnos
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {modal.benefits.map(({ icon: BIcon, title: btitle, desc }) => (
-                  <div
-                    key={btitle}
-                    className="flex gap-3 rounded-2xl p-4"
-                    style={{ background: "#faf9f7", border: "1px solid #f0ece6" }}
-                  >
-                    <div
-                      className="flex items-center justify-center rounded-xl flex-shrink-0"
-                      style={{ width: 38, height: 38, background: "linear-gradient(135deg,#1a2744,#243256)" }}
-                    >
-                      <BIcon size={16} style={{ color: "#c9a96e" }} />
-                    </div>
-                    <div>
-                      <p style={{ color: "#1a2744", fontSize: "0.8rem", fontWeight: 700, marginBottom: 3 }}>{btitle}</p>
-                      <p style={{ color: "#6b7280", fontSize: "0.75rem", lineHeight: 1.6 }}>{desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* El proceso */}
-            <div style={{ marginBottom: 32 }}>
-              <div className="flex items-center gap-3 mb-5">
-                <div style={{ width: 3, height: 18, background: "linear-gradient(180deg,#c9a96e,rgba(201,169,110,0.3))", borderRadius: 2, flexShrink: 0 }} />
-                <p style={{ color: "#1a2744", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em" }}>
-                  El proceso
-                </p>
-              </div>
-              <div className="space-y-3">
-                {modal.steps.map(({ title: stitle, desc }, idx) => (
-                  <div key={stitle} className="flex gap-4">
-                    {/* Step number column */}
-                    <div className="flex flex-col items-center flex-shrink-0" style={{ width: 32 }}>
-                      <div
-                        className="flex items-center justify-center rounded-full font-bold flex-shrink-0"
-                        style={{ width: 32, height: 32, background: "linear-gradient(135deg,#c9a96e,#d9bc8a)", color: "#1a2744", fontSize: "0.8rem" }}
-                      >
-                        {idx + 1}
-                      </div>
-                      {idx < modal.steps.length - 1 && (
-                        <div style={{ width: 1, flex: 1, minHeight: 16, background: "linear-gradient(180deg,rgba(201,169,110,0.4),transparent)", marginTop: 4 }} />
-                      )}
-                    </div>
-                    {/* Step content */}
-                    <div style={{ paddingBottom: idx < modal.steps.length - 1 ? 12 : 0 }}>
-                      <p style={{ color: "#1a2744", fontSize: "0.82rem", fontWeight: 700, marginBottom: 3 }}>{stitle}</p>
-                      <p style={{ color: "#6b7280", fontSize: "0.78rem", lineHeight: 1.65 }}>{desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
 
-          {/* Sticky CTA footer */}
-          <div
-            className="sticky bottom-0"
-            style={{ background: "white", padding: "20px 36px 28px", borderTop: "1px solid #f0ece6" }}
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {modal.benefits.map(({ icon: BIcon, title: btitle, desc }) => (
+              <div
+                key={btitle}
+                className="flex gap-4 rounded-2xl p-6"
+                style={{ background: "white", border: "1px solid #ede8e0", boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}
+              >
+                <div
+                  className="flex items-center justify-center rounded-2xl flex-shrink-0"
+                  style={{ width: 48, height: 48, background: "linear-gradient(135deg,#1a2744,#243256)" }}
+                >
+                  <BIcon size={20} style={{ color: "#c9a96e" }} />
+                </div>
+                <div>
+                  <p style={{ color: "#1a2744", fontSize: "0.9rem", fontWeight: 700, marginBottom: 6 }}>{btitle}</p>
+                  <p style={{ color: "#6b7280", fontSize: "0.82rem", lineHeight: 1.7 }}>{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── EL PROCESO ── */}
+      <div style={{ background: "white", padding: "56px 24px" }}>
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center gap-3 mb-10">
+            <div style={{ width: 3, height: 22, background: "linear-gradient(180deg,#c9a96e,rgba(201,169,110,0.2))", borderRadius: 2 }} />
+            <p style={{ color: "#1a2744", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+              El proceso
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-0">
+            {modal.steps.map(({ title: stitle, desc }, idx) => (
+              <div key={stitle} className="relative flex md:flex-col gap-5 md:gap-0 pb-8 md:pb-0 md:pr-8">
+                {/* Connector line */}
+                {idx < modal.steps.length - 1 && (
+                  <div
+                    className="absolute md:hidden"
+                    style={{ left: 19, top: 48, bottom: 0, width: 1, background: "linear-gradient(180deg,rgba(201,169,110,0.4),rgba(201,169,110,0.05))" }}
+                  />
+                )}
+                {idx < modal.steps.length - 1 && (
+                  <div
+                    className="absolute hidden md:block"
+                    style={{ top: 19, left: "calc(48px + 16px)", right: 0, height: 1, background: "linear-gradient(90deg,rgba(201,169,110,0.4),rgba(201,169,110,0.05))" }}
+                  />
+                )}
+
+                {/* Number bubble */}
+                <div
+                  className="flex items-center justify-center rounded-full font-bold flex-shrink-0 mb-0 md:mb-5"
+                  style={{ width: 38, height: 38, background: "linear-gradient(135deg,#c9a96e,#d9bc8a)", color: "#1a2744", fontSize: "0.88rem", zIndex: 1 }}
+                >
+                  {idx + 1}
+                </div>
+
+                {/* Text */}
+                <div>
+                  <p style={{ color: "#1a2744", fontSize: "0.88rem", fontWeight: 700, marginBottom: 6 }}>{stitle}</p>
+                  <p style={{ color: "#6b7280", fontSize: "0.80rem", lineHeight: 1.7 }}>{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── CTA BAND ── */}
+      <div
+        style={{
+          background: "linear-gradient(135deg,#0d1526 0%,#1a2744 100%)",
+          padding: "56px 24px",
+          borderTop: "1px solid rgba(201,169,110,0.15)",
+        }}
+      >
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+          <div>
+            <p className="text-white font-light mb-1" style={{ fontSize: "clamp(1.2rem, 2.5vw, 1.6rem)" }}>
+              ¿Listo para dar el primer paso?
+            </p>
+            <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.88rem" }}>
+              Primera consulta sin compromiso · Respuesta en menos de 24 h
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
             <button
               onClick={onContact}
-              className="w-full flex items-center justify-center gap-3 rounded-2xl font-semibold tracking-wide transition-all"
+              className="flex items-center justify-center gap-3 rounded-xl font-semibold w-full sm:w-auto"
               style={{
-                padding: "15px 24px",
+                padding: "16px 36px",
                 background: "linear-gradient(135deg,#c9a96e,#d9bc8a)",
                 color: "#1a2744",
                 fontSize: "0.9rem",
-                boxShadow: "0 8px 28px rgba(201,169,110,0.40)",
+                boxShadow: "0 8px 32px rgba(201,169,110,0.38)",
+                whiteSpace: "nowrap",
+                transition: "transform 0.25s ease, box-shadow 0.25s ease",
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 14px 40px rgba(201,169,110,0.56)"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)";    e.currentTarget.style.boxShadow = "0 8px 28px rgba(201,169,110,0.40)"; }}
+              onMouseEnter={e => { e.currentTarget.style.transform="translateY(-3px)"; e.currentTarget.style.boxShadow="0 16px 48px rgba(201,169,110,0.55)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)";    e.currentTarget.style.boxShadow="0 8px 32px rgba(201,169,110,0.38)"; }}
             >
               Solicitar consulta gratuita
               <ArrowRight size={16} />
             </button>
-            <p style={{ textAlign: "center", fontSize: "0.72rem", color: "#9ca3af", marginTop: 10 }}>
-              Sin compromiso · Respuesta en menos de 24 h · +34 932 041 069
-            </p>
+            <a
+              href="tel:+34932041069"
+              className="flex items-center justify-center gap-2 rounded-xl font-medium w-full sm:w-auto"
+              style={{
+                padding: "16px 28px",
+                border: "1px solid rgba(255,255,255,0.22)",
+                color: "rgba(255,255,255,0.80)",
+                fontSize: "0.88rem",
+                whiteSpace: "nowrap",
+                transition: "background 0.25s ease, border-color 0.25s ease",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.09)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.42)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.22)"; }}
+            >
+              <Phone size={14} />
+              +34 932 041 069
+            </a>
           </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes ccFadeIn  { from { opacity:0 } to { opacity:1 } }
-        @keyframes ccSlideUp { from { opacity:0; transform:translateY(32px) scale(0.96) } to { opacity:1; transform:translateY(0) scale(1) } }
-
-        /* Left panel: full-width on mobile, fixed sidebar on desktop */
-        @media (min-width: 1024px) {
-          .cc-modal-left { width: 340px !important; }
-        }
+        @keyframes ccFadeIn { from { opacity:0 } to { opacity:1 } }
       `}</style>
     </div>
   );
