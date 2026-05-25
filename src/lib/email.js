@@ -354,3 +354,71 @@ export async function sendPaymentReminder({
   });
   return send({ to, subject: "Pago pendiente - Clínica Cotten", html });
 }
+
+// ─── 8. Contact form (landing page) ──────────────────────────────────────────
+
+const CLINIC_EMAIL = "onboarding@resend.dev";
+
+export async function sendContactForm({ nombre, apellidos, email, telefono, mensaje }) {
+  const fullName = `${nombre} ${apellidos}`.trim();
+
+  // ── Notification to clinic ──
+  const clinicHtml = layout({
+    preheader: `Nueva solicitud de cita de ${fullName}.`,
+    body: `
+      <table width="100%" cellpadding="0" cellspacing="0">
+        ${accentBar()}
+        ${heading("Nueva solicitud de cita")}
+        ${intro(`Ha llegado una nueva solicitud de cita a través del formulario de la web.`)}
+        ${infoBox([
+          ["Nombre",    fullName  ],
+          ["Email",     email     ],
+          ["Teléfono",  telefono  ],
+        ])}
+        <tr><td style="padding:0 36px 28px;">
+          <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;">Mensaje</p>
+          <div style="background:#faf9f7;border:1px solid #f0ece6;border-radius:10px;padding:16px 18px;font-size:13px;color:#374151;line-height:1.7;">
+            ${mensaje.replace(/\n/g, "<br>")}
+          </div>
+        </td></tr>
+        ${ctaButton("Responder por email", `mailto:${email}`)}
+        ${divider()}
+        ${note(`Solicitud recibida desde el formulario de contacto de la web. Responda directamente a <a href="mailto:${email}" style="color:#c9a96e;">${email}</a> o llame al ${telefono}.`)}
+      </table>`,
+  });
+
+  // ── Confirmation to sender ──
+  const confirmHtml = layout({
+    preheader: "Hemos recibido su solicitud. Le contactaremos en menos de 24 horas.",
+    body: `
+      <table width="100%" cellpadding="0" cellspacing="0">
+        ${accentBar()}
+        ${heading(`Gracias, ${nombre}`)}
+        ${intro(`Hemos recibido su solicitud de cita correctamente. Nuestro equipo se pondrá en contacto con usted <strong>en menos de 24 horas</strong> para confirmar su consulta.`)}
+        ${infoBox([
+          ["Nombre",    fullName ],
+          ["Email",     email    ],
+          ["Teléfono",  telefono ],
+        ])}
+        <tr><td style="padding:0 36px 24px;">
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 18px;font-size:13px;color:#92400e;line-height:1.6;">
+            Si necesita contactar con nosotros de forma urgente, puede llamarnos directamente al <strong>+34 932 041 069</strong>.
+          </div>
+        </td></tr>
+        ${infoBox([
+          ["Clínica",   "Clínica Cotten"                          ],
+          ["Dirección", "C/ Sabino Arana 40, 1°, 2ª · Barcelona"  ],
+          ["Horario",   "Lunes – Viernes · 9:30 – 19:00 h"        ],
+          ["Teléfono",  "+34 932 041 069"                          ],
+        ])}
+        ${ctaButton("Ver portal del paciente", PORTAL_URL)}
+        ${divider()}
+        ${note("Si usted no ha enviado esta solicitud, puede ignorar este mensaje.")}
+      </table>`,
+  });
+
+  await Promise.all([
+    send({ to: CLINIC_EMAIL, subject: `Nueva solicitud de cita - ${fullName}`, html: clinicHtml }),
+    send({ to: email,        subject: "Hemos recibido su solicitud - Clínica Cotten",   html: confirmHtml }),
+  ]);
+}

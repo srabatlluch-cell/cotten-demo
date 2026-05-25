@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useRef, useState, useEffect } from "react";
+import { sendContactForm } from "../lib/email";
 import {
   MapPin, Phone, Clock, Shield, Award, Star,
   Zap, Activity, Smile, Sparkles, ChevronDown,
@@ -498,6 +499,37 @@ export default function Landing() {
   const [navSolid,       setNavSolid]       = useState(false);
   const [heroImgY,       setHeroImgY]       = useState(0);
   const [hoveredCard,    setHoveredCard]    = useState(null);
+
+  /* contact form */
+  const EMPTY_FORM = { nombre: "", apellidos: "", email: "", telefono: "", mensaje: "" };
+  const [formData,       setFormData]       = useState(EMPTY_FORM);
+  const [formStatus,     setFormStatus]     = useState("idle"); // idle | sending | success | error
+  const [formError,      setFormError]      = useState("");
+  const [submittedName,  setSubmittedName]  = useState("");
+
+  const handleFormChange = (e) =>
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+  const handleFormSubmit = async (e) => {
+    e.preventDefault();
+    const { nombre, email, telefono } = formData;
+    if (!nombre.trim() || !email.trim() || !telefono.trim()) {
+      setFormError("Por favor, complete los campos obligatorios: nombre, email y teléfono.");
+      return;
+    }
+    setFormError("");
+    setFormStatus("sending");
+    try {
+      await sendContactForm(formData);
+      setSubmittedName(nombre.trim());
+      setFormStatus("success");
+      setFormData(EMPTY_FORM);
+    } catch (err) {
+      console.error("[contact form] send failed:", err);
+      setFormError("Ha ocurrido un error al enviar su mensaje. Por favor, inténtelo de nuevo o llámenos directamente.");
+      setFormStatus("error");
+    }
+  };
 
   /* combined scroll handler */
   const lastScrollY = useRef(0);
@@ -1158,35 +1190,168 @@ export default function Landing() {
             ))}
           </div>
 
-          {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={() => navigate("/acceso-paciente")}
-              className="w-full sm:w-auto px-10 py-4 rounded-xl text-sm font-semibold tracking-wide"
-              style={{
-                background: "linear-gradient(135deg, #c9a96e, #d9bc8a)",
-                color: "#1a2744",
-                boxShadow: "0 8px 30px rgba(201,169,110,0.32)",
-                transition: "transform 0.3s ease, box-shadow 0.3s ease",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform="translateY(-3px)"; e.currentTarget.style.boxShadow="0 14px 44px rgba(201,169,110,0.56)"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)";    e.currentTarget.style.boxShadow="0 8px 30px rgba(201,169,110,0.32)"; }}
-            >
-              Acceso Portal Paciente
-            </button>
-            <a
-              href="tel:+34932041069"
-              className="w-full sm:w-auto px-10 py-4 rounded-xl text-sm font-medium tracking-wide text-center"
-              style={{
-                border: "1px solid rgba(255,255,255,0.28)",
-                color: "white",
-                transition: "background 0.3s ease, border-color 0.3s ease",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.10)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.50)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background="transparent";            e.currentTarget.style.borderColor="rgba(255,255,255,0.28)"; }}
-            >
-              Llamar ahora
-            </a>
+          {/* Contact form */}
+          <div
+            className="rounded-3xl overflow-hidden"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", backdropFilter: "blur(12px)" }}
+          >
+            {formStatus === "success" ? (
+              /* ── Success state ── */
+              <div className="flex flex-col items-center justify-center text-center" style={{ padding: "56px 36px" }}>
+                <div
+                  className="flex items-center justify-center rounded-full mb-6"
+                  style={{ width: 64, height: 64, background: "rgba(201,169,110,0.18)", border: "1px solid rgba(201,169,110,0.35)" }}
+                >
+                  <CheckCircle size={28} style={{ color: "#c9a96e" }} />
+                </div>
+                <h3 className="text-white font-semibold mb-3" style={{ fontSize: "1.3rem" }}>
+                  ¡Mensaje enviado!
+                </h3>
+                <p style={{ color: "rgba(255,255,255,0.60)", fontSize: "0.95rem", lineHeight: 1.7, maxWidth: 420 }}>
+                  Gracias <strong style={{ color: "rgba(255,255,255,0.85)" }}>{submittedName || "por contactarnos"}</strong>, hemos recibido su solicitud. Le contactaremos en menos de 24 horas.
+                </p>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.80rem", marginTop: 16 }}>
+                  Recibirá un email de confirmación en breve.
+                </p>
+                <button
+                  onClick={() => setFormStatus("idle")}
+                  className="mt-8 px-6 py-2.5 rounded-xl text-sm font-medium"
+                  style={{ border: "1px solid rgba(255,255,255,0.22)", color: "rgba(255,255,255,0.70)", transition: "background 0.2s ease" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  Enviar otra solicitud
+                </button>
+              </div>
+            ) : (
+              /* ── Form ── */
+              <form onSubmit={handleFormSubmit} noValidate style={{ padding: "36px 36px 40px" }}>
+                <p className="text-xs uppercase tracking-widest font-semibold mb-6" style={{ color: "#c9a96e" }}>
+                  Solicitar cita
+                </p>
+
+                {/* Row 1: Nombre + Apellidos */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  {[
+                    { name: "nombre",    label: "Nombre *",    type: "text",  placeholder: "María"          },
+                    { name: "apellidos", label: "Apellidos",   type: "text",  placeholder: "García López"   },
+                  ].map(({ name, label, type, placeholder }) => (
+                    <div key={name}>
+                      <label style={{ display: "block", color: "rgba(255,255,255,0.50)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 6 }}>
+                        {label}
+                      </label>
+                      <input
+                        type={type}
+                        name={name}
+                        value={formData[name]}
+                        onChange={handleFormChange}
+                        placeholder={placeholder}
+                        className="w-full rounded-xl outline-none"
+                        style={{
+                          padding: "12px 16px",
+                          background: "rgba(255,255,255,0.07)",
+                          border: "1px solid rgba(255,255,255,0.14)",
+                          color: "white",
+                          fontSize: "0.88rem",
+                          transition: "border-color 0.2s ease, background 0.2s ease",
+                        }}
+                        onFocus={e => { e.target.style.borderColor="rgba(201,169,110,0.55)"; e.target.style.background="rgba(255,255,255,0.10)"; }}
+                        onBlur={e  => { e.target.style.borderColor="rgba(255,255,255,0.14)"; e.target.style.background="rgba(255,255,255,0.07)"; }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Row 2: Email + Teléfono */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  {[
+                    { name: "email",    label: "Email *",     type: "email", placeholder: "maria@ejemplo.com" },
+                    { name: "telefono", label: "Teléfono *",  type: "tel",   placeholder: "+34 600 000 000"   },
+                  ].map(({ name, label, type, placeholder }) => (
+                    <div key={name}>
+                      <label style={{ display: "block", color: "rgba(255,255,255,0.50)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 6 }}>
+                        {label}
+                      </label>
+                      <input
+                        type={type}
+                        name={name}
+                        value={formData[name]}
+                        onChange={handleFormChange}
+                        placeholder={placeholder}
+                        className="w-full rounded-xl outline-none"
+                        style={{
+                          padding: "12px 16px",
+                          background: "rgba(255,255,255,0.07)",
+                          border: "1px solid rgba(255,255,255,0.14)",
+                          color: "white",
+                          fontSize: "0.88rem",
+                          transition: "border-color 0.2s ease, background 0.2s ease",
+                        }}
+                        onFocus={e => { e.target.style.borderColor="rgba(201,169,110,0.55)"; e.target.style.background="rgba(255,255,255,0.10)"; }}
+                        onBlur={e  => { e.target.style.borderColor="rgba(255,255,255,0.14)"; e.target.style.background="rgba(255,255,255,0.07)"; }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Mensaje */}
+                <div className="mb-6">
+                  <label style={{ display: "block", color: "rgba(255,255,255,0.50)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 6 }}>
+                    Mensaje
+                  </label>
+                  <textarea
+                    name="mensaje"
+                    value={formData.mensaje}
+                    onChange={handleFormChange}
+                    placeholder="Cuéntenos brevemente qué tratamiento le interesa o cualquier duda que tenga…"
+                    rows={4}
+                    className="w-full rounded-xl outline-none resize-none"
+                    style={{
+                      padding: "12px 16px",
+                      background: "rgba(255,255,255,0.07)",
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      color: "white",
+                      fontSize: "0.88rem",
+                      transition: "border-color 0.2s ease, background 0.2s ease",
+                    }}
+                    onFocus={e => { e.target.style.borderColor="rgba(201,169,110,0.55)"; e.target.style.background="rgba(255,255,255,0.10)"; }}
+                    onBlur={e  => { e.target.style.borderColor="rgba(255,255,255,0.14)"; e.target.style.background="rgba(255,255,255,0.07)"; }}
+                  />
+                </div>
+
+                {/* Error message */}
+                {formError && (
+                  <p style={{ color: "#fca5a5", fontSize: "0.82rem", marginBottom: 16, lineHeight: 1.5 }}>
+                    {formError}
+                  </p>
+                )}
+
+                {/* Submit */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <button
+                    type="submit"
+                    disabled={formStatus === "sending"}
+                    className="px-10 py-4 rounded-xl text-sm font-semibold tracking-wide"
+                    style={{
+                      background: formStatus === "sending"
+                        ? "rgba(201,169,110,0.45)"
+                        : "linear-gradient(135deg, #c9a96e, #d9bc8a)",
+                      color: "#1a2744",
+                      cursor: formStatus === "sending" ? "not-allowed" : "pointer",
+                      boxShadow: "0 8px 30px rgba(201,169,110,0.30)",
+                      transition: "transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease",
+                    }}
+                    onMouseEnter={e => { if (formStatus !== "sending") { e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 14px 44px rgba(201,169,110,0.52)"; } }}
+                    onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)";   e.currentTarget.style.boxShadow="0 8px 30px rgba(201,169,110,0.30)"; }}
+                  >
+                    {formStatus === "sending" ? "Enviando…" : "Solicitar cita"}
+                  </button>
+                  <p style={{ color: "rgba(255,255,255,0.30)", fontSize: "0.75rem" }}>
+                    * Campos obligatorios. Sin compromiso.
+                  </p>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       </section>
