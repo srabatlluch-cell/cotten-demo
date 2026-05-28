@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, Calendar, CreditCard, PenLine, ChevronRight, Loader2, AlertTriangle, AlertCircle } from "lucide-react";
+import { Users, Calendar, CreditCard, PenLine, ChevronRight, Loader2, AlertTriangle, AlertCircle, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { apptStatus, patientStatus } from "../../lib/statusStyles";
@@ -23,8 +23,34 @@ async function loadPanel() {
 }
 
 export default function Panel() {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data,       setData]       = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [confirming, setConfirming] = useState(null); // appointment id being confirmed
+
+  async function handleConfirm(apptId) {
+    setConfirming(apptId);
+    try {
+      const { error } = await supabase.rpc("admin_confirm_appointment", {
+        p_appointment_id: apptId,
+      });
+      if (error) throw error;
+      // Optimistic update — change status in local state without refetch
+      setData(prev => ({
+        ...prev,
+        today: prev.today.map(a =>
+          a.id === apptId ? { ...a, appt_status: "confirmed" } : a
+        ),
+        stats: {
+          ...prev.stats,
+          unconfirmed_appointments: Math.max(0, (prev.stats.unconfirmed_appointments ?? 1) - 1),
+        },
+      }));
+    } catch (err) {
+      console.error("[Panel] confirm appointment error:", err);
+    } finally {
+      setConfirming(null);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -194,6 +220,28 @@ export default function Panel() {
                       {a.doctor_name && <p className="text-xs" style={{ color: "#6b7280" }}>{a.doctor_name.split(" ").slice(-1)[0]}</p>}
                       {a.room        && <p className="text-xs" style={{ color: "#9ca3af" }}>{a.room}</p>}
                     </div>
+                    {/* Confirm button — only for scheduled appointments */}
+                    {a.appt_status === "scheduled" && (
+                      <button
+                        onClick={() => handleConfirm(a.id)}
+                        disabled={confirming === a.id}
+                        title="Confirmar cita"
+                        className="flex items-center justify-center rounded-lg flex-shrink-0 transition-all"
+                        style={{
+                          width: 28, height: 28,
+                          background: confirming === a.id ? "#dcfce7" : "#f0fdf4",
+                          border: "1px solid #bbf7d0",
+                          color: "#16a34a",
+                        }}
+                        onMouseEnter={e => { if (confirming !== a.id) e.currentTarget.style.background = "#dcfce7"; }}
+                        onMouseLeave={e => { if (confirming !== a.id) e.currentTarget.style.background = "#f0fdf4"; }}
+                      >
+                        {confirming === a.id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <Check size={13} />}
+                      </button>
+                    )}
+
                     {/* Status badge */}
                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0" style={sc.badge}>
                       {sc.icon} {sc.label}
