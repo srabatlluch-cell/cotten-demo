@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Users, Calendar, CreditCard, PenLine, ChevronRight, Loader2, AlertTriangle, AlertCircle, Check } from "lucide-react";
+import { Users, Calendar, CreditCard, PenLine, ChevronRight, Loader2, AlertTriangle, AlertCircle, Check, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { apptStatus, patientStatus } from "../../lib/statusStyles";
+import { sendAppointmentCancellation } from "../../lib/email";
 
 async function loadPanel() {
   const [statsRes, todayRes, recentRes] = await Promise.all([
@@ -25,7 +26,9 @@ async function loadPanel() {
 export default function Panel() {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
-  const [confirming, setConfirming] = useState(null); // appointment id being confirmed
+  const [confirming,    setConfirming]    = useState(null); // id being confirmed
+  const [cancelPending, setCancelPending] = useState(null); // id waiting 2nd-click to cancel
+  const [canceling,     setCanceling]     = useState(null); // id being cancelled
 
   async function handleConfirm(apptId) {
     setConfirming(apptId);
@@ -67,6 +70,49 @@ export default function Panel() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  async function handleCancelAppt(appt) {
+    setCancelPending(null);
+    setCanceling(appt.id);
+    try {
+      const { error } = await supabase.rpc("admin_cancel_appointment", {
+        p_appointment_id: appt.id,
+      });
+      if (error) throw error;
+
+      setData(prev => ({
+        ...prev,
+        today: prev.today.map(a =>
+          a.id === appt.id ? { ...a, appt_status: "cancelled" } : a
+        ),
+        stats: {
+          ...prev.stats,
+          unconfirmed_appointments: appt.appt_status === "scheduled"
+            ? Math.max(0, (prev.stats.unconfirmed_appointments ?? 1) - 1)
+            : prev.stats.unconfirmed_appointments,
+        },
+      }));
+
+      // Send cancellation email (best-effort)
+      if (appt.patient_email) {
+        const [y, mo, d] = (appt.date ?? "").split("-").map(Number);
+        const dateStr = new Date(y, mo - 1, d).toLocaleDateString("es-ES", {
+          weekday: "long", day: "2-digit", month: "long", year: "numeric",
+        });
+        sendAppointmentCancellation({
+          to:          appt.patient_email,
+          patientName: appt.patient_name ?? "",
+          date:        dateStr,
+          time:        (appt.appointment_time ?? "").slice(0, 5) + "h",
+          treatment:   appt.treatment ?? "—",
+        }).catch(err => console.warn("[Panel] cancellation email error:", err));
+      }
+    } catch (err) {
+      console.error("[Panel] cancel appointment error:", err);
+    } finally {
+      setCanceling(null);
+    }
+  }
 
   const stats  = data?.stats  ?? {};
   const today  = data?.today  ?? [];
@@ -220,26 +266,71 @@ export default function Panel() {
                       {a.doctor_name && <p className="text-xs" style={{ color: "#6b7280" }}>{a.doctor_name.split(" ").slice(-1)[0]}</p>}
                       {a.room        && <p className="text-xs" style={{ color: "#9ca3af" }}>{a.room}</p>}
                     </div>
-                    {/* Confirm button — only for scheduled appointments */}
-                    {a.appt_status === "scheduled" && (
-                      <button
-                        onClick={() => handleConfirm(a.id)}
-                        disabled={confirming === a.id}
-                        title="Confirmar cita"
-                        className="flex items-center justify-center rounded-lg flex-shrink-0 transition-all"
-                        style={{
-                          width: 28, height: 28,
-                          background: confirming === a.id ? "#dcfce7" : "#f0fdf4",
-                          border: "1px solid #bbf7d0",
-                          color: "#16a34a",
-                        }}
-                        onMouseEnter={e => { if (confirming !== a.id) e.currentTarget.style.background = "#dcfce7"; }}
-                        onMouseLeave={e => { if (confirming !== a.id) e.currentTarget.style.background = "#f0fdf4"; }}
-                      >
-                        {confirming === a.id
-                          ? <Loader2 size={13} className="animate-spin" />
-                          : <Check size={13} />}
-                      </button>
+                    {/* Action buttons — only for active appointments */}
+                    {(a.appt_status === "scheduled" || a.appt_status === "confirmed") && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+
+                        {/* Confirm — only for scheduled */}
+                        {a.appt_status === "scheduled" && (
+                          <button
+                            onClick={() => { setCancelPending(null); handleConfirm(a.id); }}
+                            disabled={confirming === a.id || canceling === a.id}
+                            title="Confirmar cita"
+                            className="flex items-center justify-center rounded-lg transition-all"
+                            style={{
+                              width: 28, height: 28,
+                              background: "#f0fdf4",
+                              border: "1px solid #bbf7d0",
+                              color: "#16a34a",
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "#dcfce7"}
+                            onMouseLeave={e => e.currentTarget.style.background = "#f0fdf4"}
+                          >
+                            {confirming === a.id
+                              ? <Loader2 size={13} className="animate-spin" />
+                              : <Check size={13} />}
+                          </button>
+                        )}
+
+                        {/* Cancel — inline two-click confirmation */}
+                        {cancelPending === a.id ? (
+                          <div className="flex items-center gap-1">
+                            <span style={{ fontSize: "0.68rem", color: "#dc2626", whiteSpace: "nowrap" }}>¿Cancelar?</span>
+                            <button
+                              onClick={() => handleCancelAppt(a)}
+                              disabled={canceling === a.id}
+                              className="flex items-center justify-center rounded-lg transition-all"
+                              style={{ width: 28, height: 28, background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626" }}
+                            >
+                              {canceling === a.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                            </button>
+                            <button
+                              onClick={() => setCancelPending(null)}
+                              className="flex items-center justify-center rounded-lg transition-all"
+                              style={{ width: 28, height: 28, background: "#f9fafb", border: "1px solid #e5e0d8", color: "#9ca3af" }}
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setCancelPending(a.id)}
+                            disabled={canceling === a.id || confirming === a.id}
+                            title="Cancelar cita"
+                            className="flex items-center justify-center rounded-lg transition-all"
+                            style={{
+                              width: 28, height: 28,
+                              background: "#fff5f5",
+                              border: "1px solid #fecaca",
+                              color: "#dc2626",
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "#fef2f2"}
+                            onMouseLeave={e => e.currentTarget.style.background = "#fff5f5"}
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     {/* Status badge */}

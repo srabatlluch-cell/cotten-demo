@@ -117,6 +117,7 @@ const EMPTY_CREATE = {
   treatment:  "",
   room:       "",
   status:     "confirmed",
+  notes:      "",
 };
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
@@ -240,6 +241,25 @@ function AppointmentForm({ form, onChange, patients, doctors, showPatient = true
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Observaciones — staff only */}
+      <div style={{ borderTop: "1px solid #f3f0ea", paddingTop: 16, marginTop: 4 }}>
+        <label className="flex items-center gap-1.5 text-xs font-medium mb-1.5" style={{ color: "#374151" }}>
+          <EyeOff size={12} style={{ color: "#9ca3af" }} />
+          Observaciones internas
+          <span className="ml-1 px-2 py-0.5 rounded-full text-xs" style={{ background: "#f3f0ea", color: "#9ca3af", fontSize: "0.65rem" }}>
+            Solo personal
+          </span>
+        </label>
+        <textarea
+          rows={3}
+          placeholder="Motivo de cancelación, notas del tratamiento, indicaciones para el doctor…"
+          value={form.notes ?? ""}
+          onChange={e => onChange("notes", e.target.value)}
+          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none bg-white"
+          style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+        />
       </div>
 
       {error && (
@@ -386,6 +406,7 @@ export default function Agenda() {
         p_treatment:  createForm.treatment,
         p_room:       createForm.room || null,
         p_status:     createForm.status,
+        p_notes:      createForm.notes || null,
       });
       if (error) throw error;
 
@@ -403,6 +424,7 @@ export default function Agenda() {
         patient_id:       createForm.patient_id,
         doctor_name:      doc?.full_name ?? null,
         doctor_id:        createForm.doctor_id || null,
+        notes:            createForm.notes || null,
       }, ...prev]);
 
       setShowCreate(false);
@@ -425,6 +447,7 @@ export default function Agenda() {
       treatment: appt.treatment  ?? "",
       room:      appt.room       ?? "",
       status:    appt.appt_status ?? "scheduled",
+      notes:     appt.notes      ?? "",
     });
     setEditError("");
   }
@@ -449,6 +472,7 @@ export default function Agenda() {
         p_room:           editForm.room || "",
         p_status:         editForm.status,
         p_doctor_id:      editForm.doctor_id || null,
+        p_notes:          editForm.notes || null,
       });
       if (error) throw error;
 
@@ -464,6 +488,7 @@ export default function Agenda() {
               appt_status:      editForm.status,
               doctor_id:        editForm.doctor_id || null,
               doctor_name:      doc?.full_name ?? a.doctor_name,
+              notes:            editForm.notes || null,
             }
           : a
       ));
