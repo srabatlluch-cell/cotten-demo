@@ -355,7 +355,64 @@ export async function sendPaymentReminder({
   return send({ to, subject: "Pago pendiente - Clínica Cotten", html });
 }
 
-// ─── 8. Contact form (landing page) ──────────────────────────────────────────
+// ─── 8. Appointment request — sent when staff schedules a new appointment ────
+//        Patient can confirm or cancel directly from the email (no login needed)
+
+export async function sendAppointmentRequest({
+  to,
+  patientName,
+  date,
+  time,
+  doctor,
+  treatment,
+  room,
+  token,          // confirmation_token UUID from appointments table
+}) {
+  const confirmUrl = `${PORTAL_URL}/cita?token=${token}&action=confirm`;
+  const cancelUrl  = `${PORTAL_URL}/cita?token=${token}&action=cancel`;
+
+  const html = layout({
+    preheader: `Se ha programado una cita para el ${date} a las ${time}. Por favor confirme su asistencia.`,
+    body: `
+      <table width="100%" cellpadding="0" cellspacing="0">
+        ${accentBar()}
+        ${heading("Nueva cita programada")}
+        ${intro(`Estimado/a <strong>${patientName}</strong>, hemos programado una cita para usted en Clínica Cotten. Por favor, indíquenos si podrá asistir.`)}
+        ${infoBox([
+          ["Fecha",        date                        ],
+          ["Hora",         time                        ],
+          ["Doctor/a",     doctor                      ],
+          ["Tratamiento",  treatment                   ],
+          ...(room ? [["Consulta", room]] : []),
+        ])}
+        <tr><td style="padding:0 36px 28px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td width="48%" style="padding-right:8px;">
+                <a href="${confirmUrl}"
+                   style="display:block;text-align:center;background:#15803d;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 20px;border-radius:10px;letter-spacing:0.3px;">
+                  ✓&nbsp; Confirmar asistencia
+                </a>
+              </td>
+              <td width="4%"></td>
+              <td width="48%" style="padding-left:8px;">
+                <a href="${cancelUrl}"
+                   style="display:block;text-align:center;background:#ffffff;color:#dc2626;text-decoration:none;font-size:14px;font-weight:600;padding:13px 20px;border-radius:10px;letter-spacing:0.3px;border:2px solid #fecaca;">
+                  ✗&nbsp; No podré asistir
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+        ${divider()}
+        ${note(`Los enlaces son de uso personal e intransferible. Si tiene alguna duda, llámenos al <strong>+34 932 041 069</strong>.`)}
+      </table>`,
+  });
+
+  return send({ to, subject: `Cita programada el ${date} – Confirme su asistencia`, html });
+}
+
+// ─── 9. Contact form (landing page) ──────────────────────────────────────────
 
 const CLINIC_EMAIL = "srabatlluch@gmail.com";
 

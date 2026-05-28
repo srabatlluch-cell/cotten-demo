@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Plus, X, Loader2, AlertCircle, Save, EyeOff, Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Loader2, AlertCircle, Save, EyeOff, Eye, Bell, CheckCircle } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { apptStatus } from "../../lib/statusStyles";
 import {
   sendAppointmentConfirmation,
   sendAppointmentCancellation,
+  sendAppointmentReminder,
+  sendAppointmentRequest,
   sendVisitThankYou,
 } from "../../lib/email";
 
@@ -323,6 +325,7 @@ export default function Agenda() {
   const [editForm,      setEditForm]      = useState(null);
   const [editError,     setEditError]     = useState("");
   const [saving,        setSaving]        = useState(false);
+  const [reminderState, setReminderState] = useState("idle"); // idle | sending | sent | error
 
   // Cancelled visibility toggle
   const [hideCancelled, setHideCancelled] = useState(false);
@@ -398,7 +401,7 @@ export default function Agenda() {
 
     setCreating(true);
     try {
-      const { data: newId, error } = await supabase.rpc("admin_create_appointment", {
+      const { data, error } = await supabase.rpc("admin_create_appointment", {
         p_patient_id: createForm.patient_id,
         p_doctor_id:  createForm.doctor_id || null,
         p_date:       createForm.date,
@@ -409,6 +412,9 @@ export default function Agenda() {
         p_notes:      createForm.notes || null,
       });
       if (error) throw error;
+
+      const newId = data?.id ?? data;
+      const token = data?.token ?? null;
 
       const pt  = patients.find(p => p.patient_id === createForm.patient_id);
       const doc = doctors.find(d => d.id === createForm.doctor_id);
@@ -426,6 +432,24 @@ export default function Agenda() {
         doctor_id:        createForm.doctor_id || null,
         notes:            createForm.notes || null,
       }, ...prev]);
+
+      // Send confirm/cancel request email to patient (best-effort)
+      if (token && pt?.email) {
+        const [y, mo, d] = (createForm.date ?? "").split("-").map(Number);
+        const dateStr = new Date(y, mo - 1, d).toLocaleDateString("es-ES", {
+          weekday: "long", day: "2-digit", month: "long", year: "numeric",
+        });
+        sendAppointmentRequest({
+          to:          pt.email,
+          patientName: pt.full_name ?? "Paciente",
+          date:        dateStr,
+          time:        createForm.time + "h",
+          doctor:      doc?.full_name ?? "Por asignar",
+          treatment:   createForm.treatment ?? "—",
+          room:        createForm.room || undefined,
+          token,
+        }).catch(err => console.warn("[Agenda] request email error:", err.message));
+      }
 
       setShowCreate(false);
       setCreateForm(EMPTY_CREATE);
@@ -450,6 +474,38 @@ export default function Agenda() {
       notes:     appt.notes      ?? "",
     });
     setEditError("");
+    setReminderState("idle");
+  }
+
+  async function handleSendReminder() {
+    const pat = patients.find(p => p.patient_id === editAppt.patient_id);
+    if (!pat?.email) {
+      setReminderState("error");
+      return;
+    }
+    setReminderState("sending");
+    try {
+      const [y, mo, d] = (editForm.date ?? "").split("-").map(Number);
+      const dateStr = new Date(y, mo - 1, d).toLocaleDateString("es-ES", {
+        weekday: "long", day: "2-digit", month: "long", year: "numeric",
+      });
+      const doc = doctors.find(dr => dr.id === editForm.doctor_id);
+      await sendAppointmentReminder({
+        to:          pat.email,
+        patientName: editAppt.patient_name ?? pat.full_name ?? "",
+        date:        dateStr,
+        time:        editForm.time + "h",
+        doctor:      doc?.full_name ?? editAppt.doctor_name ?? "Por asignar",
+        treatment:   editForm.treatment ?? "—",
+        room:        editForm.room || undefined,
+      });
+      setReminderState("sent");
+      setTimeout(() => setReminderState("idle"), 3000);
+    } catch (err) {
+      console.error("[Agenda] reminder error:", err);
+      setReminderState("error");
+      setTimeout(() => setReminderState("idle"), 4000);
+    }
   }
 
   function setEditField(k, v) {
@@ -749,19 +805,47 @@ export default function Agenda() {
             onCancel={() => { setEditAppt(null); setEditForm(null); }}
             submitLabel="Guardar cambios"
           />
-          {/* Cancel appointment shortcut */}
-          {editAppt.appt_status !== "cancelled" && (
-            <div className="mt-4 pt-4 border-t" style={{ borderColor: "#f3f0ea" }}>
-              <button
-                onClick={handleCancel}
-                disabled={saving}
-                className="text-xs px-3 py-2 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-                style={{ color: "#dc2626", border: "1px solid #fecaca" }}
-              >
-                Cancelar esta cita
-              </button>
+          {/* Footer actions */}
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: "#f3f0ea" }}>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Reminder button — hidden only for cancelled/completed/no_show */}
+              {editForm.status !== "cancelled" && editForm.status !== "completed" && editForm.status !== "no_show" && (
+                <button
+                  type="button"
+                  onClick={handleSendReminder}
+                  disabled={saving || reminderState === "sending" || reminderState === "sent"}
+                  className="text-xs px-3 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  style={
+                    reminderState === "sent"
+                      ? { color: "#059669", border: "1px solid #6ee7b7", background: "#f0fdf4" }
+                      : reminderState === "error"
+                      ? { color: "#dc2626", border: "1px solid #fecaca", background: "#fff1f2" }
+                      : { color: "#1a2744", border: "1px solid #c7c0ae" }
+                  }
+                >
+                  {reminderState === "sending" && <Loader2 size={13} className="animate-spin" />}
+                  {reminderState === "sent"    && <CheckCircle size={13} />}
+                  {reminderState === "idle"    && <Bell size={13} />}
+                  {reminderState === "sending" ? "Enviando…"
+                   : reminderState === "sent"  ? "Recordatorio enviado"
+                   : reminderState === "error" ? "Error al enviar"
+                   : "Enviar recordatorio"}
+                </button>
+              )}
+              {/* Cancel appointment — hidden only if already cancelled */}
+              {editForm.status !== "cancelled" && (
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  className="text-xs px-3 py-2 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                  style={{ color: "#dc2626", border: "1px solid #fecaca" }}
+                >
+                  Cancelar esta cita
+                </button>
+              )}
             </div>
-          )}
+          </div>
         </Modal>
       )}
     </div>

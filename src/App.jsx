@@ -6,6 +6,7 @@ import StaffLogin from "./pages/StaffLogin";
 import PatientDashboard from "./pages/patient/PatientDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import TreatmentPage from "./pages/treatments/TreatmentPage";
+import AppointmentResponse from "./pages/AppointmentResponse";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/tratamientos/:slug" element={<TreatmentPage />} />
+          <Route path="/cita" element={<AppointmentResponse />} />
           <Route path="/acceso-paciente" element={<PatientLogin />} />
           <Route path="/acceso-personal" element={<StaffLogin />} />
           <Route path="/paciente/*" element={<RequirePatient><PatientDashboard /></RequirePatient>} />
