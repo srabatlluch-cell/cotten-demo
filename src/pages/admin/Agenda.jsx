@@ -498,6 +498,7 @@ export default function Agenda() {
         doctor:      doc?.full_name ?? editAppt.doctor_name ?? "Por asignar",
         treatment:   editForm.treatment ?? "—",
         room:        editForm.room || undefined,
+        token:       editAppt.confirmation_token ?? undefined,
       });
       setReminderState("sent");
       setTimeout(() => setReminderState("idle"), 3000);

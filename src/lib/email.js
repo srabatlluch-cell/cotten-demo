@@ -180,24 +180,53 @@ export async function sendAppointmentReminder({
   doctor,
   treatment,
   room,
+  token,   // optional — when provided, adds confirm/cancel action buttons
 }) {
+  const confirmUrl = token ? `${PORTAL_URL}/cita?token=${token}&action=confirm` : null;
+  const cancelUrl  = token ? `${PORTAL_URL}/cita?token=${token}&action=cancel`  : null;
+
+  const actionButtons = token
+    ? `<tr><td style="padding:0 36px 28px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td width="48%" style="padding-right:8px;">
+              <a href="${confirmUrl}"
+                 style="display:block;text-align:center;background:#15803d;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 20px;border-radius:10px;letter-spacing:0.3px;">
+                ✓&nbsp; Confirmar asistencia
+              </a>
+            </td>
+            <td width="4%"></td>
+            <td width="48%" style="padding-left:8px;">
+              <a href="${cancelUrl}"
+                 style="display:block;text-align:center;background:#ffffff;color:#dc2626;text-decoration:none;font-size:14px;font-weight:600;padding:13px 20px;border-radius:10px;letter-spacing:0.3px;border:2px solid #fecaca;">
+                ✗&nbsp; No podré asistir
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td></tr>`
+    : ctaButton("Ver mis citas", `${PORTAL_URL}/mis-citas`);
+
   const html = layout({
-    preheader: `Recordatorio: tiene una cita mañana a las ${time}.`,
+    preheader: `Recordatorio: tiene una cita el ${date} a las ${time}.`,
     body: `
       <table width="100%" cellpadding="0" cellspacing="0">
         ${accentBar()}
         ${heading("Recordatorio de cita")}
-        ${intro(`Estimado/a <strong>${patientName}</strong>, le recordamos que mañana tiene una cita en Clínica Cotten.`)}
+        ${intro(`Estimado/a <strong>${patientName}</strong>, le recordamos que tiene una cita próxima en Clínica Cotten.`)}
         ${infoBox([
-          ["Fecha", date],
-          ["Hora", time],
-          ["Doctor/a", doctor],
+          ["Fecha",       date     ],
+          ["Hora",        time     ],
+          ["Doctor/a",    doctor   ],
           ["Tratamiento", treatment],
           ...(room ? [["Consulta", room]] : []),
         ])}
-        ${ctaButton("Ver mis citas", `${PORTAL_URL}/mis-citas`)}
+        ${actionButtons}
         ${divider()}
-        ${note("Si necesita cancelar o cambiar su cita, contacte con nosotros con al menos 24 horas de antelación.")}
+        ${note(token
+          ? "Los enlaces son de uso personal e intransferible. Si tiene alguna duda, llámenos al <strong>+34 932 041 069</strong>."
+          : "Si necesita cancelar o cambiar su cita, contacte con nosotros con al menos 24 horas de antelación."
+        )}
       </table>`,
   });
   return send({ to, subject: "Recordatorio de cita - Clínica Cotten", html });
