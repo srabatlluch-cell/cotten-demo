@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
-import { Mail, Phone, Shield, Pencil, X, Save, Loader2, AlertCircle } from "lucide-react";
+import { Mail, Phone, Shield, Pencil, X, Save, Loader2, AlertCircle, UserPlus } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const INVITE_FN_URL     = `${SUPABASE_URL}/functions/v1/invite-staff`;
 
 // ─── role config ──────────────────────────────────────────────────────────────
 
@@ -24,6 +28,137 @@ function avatarColor(id) {
   if (!id) return PALETTE[0];
   const hash = [...id].reduce((a, c) => a + c.charCodeAt(0), 0);
   return PALETTE[hash % PALETTE.length];
+}
+
+const ROLE_OPTIONS = [
+  { value: "doctor",       label: "Médico / Doctor"   },
+  { value: "receptionist", label: "Recepción"          },
+  { value: "admin",        label: "Administrativo"     },
+  { value: "staff",        label: "Auxiliar / Personal"},
+];
+
+// ─── invite modal ─────────────────────────────────────────────────────────────
+
+function InviteModal({ onClose, onInvited }) {
+  const [form, setForm] = useState({ full_name: "", email: "", role: "doctor", phone: "", specialty: "" });
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState("");
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(INVITE_FN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+          "apikey":        SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          email:     form.email,
+          full_name: form.full_name,
+          role:      form.role,
+          phone:     form.phone     || null,
+          specialty: form.specialty || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Error al invitar");
+      onInvited({
+        id:        json.id,
+        full_name: form.full_name,
+        email:     form.email,
+        role:      form.role,
+        phone:     form.phone     || null,
+        specialty: form.specialty || null,
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl" style={{ border: "1px solid #e5e0d8" }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#f3f0ea" }}>
+          <h2 className="font-semibold text-sm" style={{ color: "#1a2744" }}>Añadir miembro del equipo</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <X size={16} style={{ color: "#9ca3af" }} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Nombre completo *</label>
+            <input required type="text" value={form.full_name} onChange={e => set("full_name", e.target.value)}
+              placeholder="Dr. Nombre Apellido"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+              style={{ border: "1px solid #e5e0d8", color: "#374151" }} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Email *</label>
+            <input required type="email" value={form.email} onChange={e => set("email", e.target.value)}
+              placeholder="nombre@clinica-cotten.com"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+              style={{ border: "1px solid #e5e0d8", color: "#374151" }} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Rol *</label>
+            <select required value={form.role} onChange={e => set("role", e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+              style={{ border: "1px solid #e5e0d8", color: "#374151" }}>
+              {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Especialidad / Cargo</label>
+            <input type="text" value={form.specialty} onChange={e => set("specialty", e.target.value)}
+              placeholder="Ej: Implantología Basal, Ortodoncista…"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+              style={{ border: "1px solid #e5e0d8", color: "#374151" }} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Teléfono</label>
+            <input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)}
+              placeholder="+34 932 041 069"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+              style={{ border: "1px solid #e5e0d8", color: "#374151" }} />
+          </div>
+
+          <div className="text-xs px-3 py-2.5 rounded-xl" style={{ background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" }}>
+            Se enviará un email de invitación para que el miembro establezca su contraseña.
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm px-3 py-2.5 rounded-xl" style={{ background: "#fef2f2", color: "#dc2626" }}>
+              <AlertCircle size={14} className="flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, #1a2744, #2a3a5c)", color: "white" }}>
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+              {saving ? "Invitando…" : "Enviar invitación"}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-all"
+              style={{ border: "1px solid #e5e0d8", color: "#6b7280" }}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 // ─── edit modal ───────────────────────────────────────────────────────────────
@@ -121,10 +256,11 @@ function EditModal({ member, onClose, onSaved }) {
 // ─── main component ───────────────────────────────────────────────────────────
 
 export default function Equipo() {
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState("");
-  const [editing, setEditing] = useState(null);
+  const [members,  setMembers]  = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState("");
+  const [editing,  setEditing]  = useState(null);
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     supabase.rpc("get_staff_members")
@@ -139,6 +275,11 @@ export default function Equipo() {
   function handleSaved(updated) {
     setMembers(prev => prev.map(m => m.id === updated.id ? updated : m));
     setEditing(null);
+  }
+
+  function handleInvited(newMember) {
+    setMembers(prev => [...prev, newMember]);
+    setInviting(false);
   }
 
   if (loading) {
@@ -162,11 +303,21 @@ export default function Equipo() {
 
   return (
     <div className="p-6 lg:p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold" style={{ color: "#1a2744" }}>Equipo</h1>
-        <p className="text-sm mt-1" style={{ color: "#6b7280" }}>
-          Personal de Clínica Cotten · {members.length} miembro{members.length !== 1 ? "s" : ""}
-        </p>
+      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold" style={{ color: "#1a2744" }}>Equipo</h1>
+          <p className="text-sm mt-1" style={{ color: "#6b7280" }}>
+            Personal de Clínica Cotten · {members.length} miembro{members.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <button
+          onClick={() => setInviting(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90"
+          style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)", color: "#1a2744" }}
+        >
+          <UserPlus size={15} />
+          Añadir miembro
+        </button>
       </div>
 
       {members.length === 0 ? (
@@ -252,6 +403,13 @@ export default function Equipo() {
           member={editing}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {inviting && (
+        <InviteModal
+          onClose={() => setInviting(false)}
+          onInvited={handleInvited}
         />
       )}
     </div>
