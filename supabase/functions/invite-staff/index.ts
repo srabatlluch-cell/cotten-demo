@@ -43,7 +43,21 @@ serve(async (req: Request) => {
       });
     }
 
-    // Try to invite; if email already exists, look up the existing auth user instead
+    const supabaseUrl    = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Helper: find an existing auth user by email via the GoTrue REST API
+    async function findUserByEmail(em: string): Promise<string | null> {
+      const res = await fetch(
+        `${supabaseUrl}/auth/v1/admin/users?filter=${encodeURIComponent(em)}&page=1&per_page=100`,
+        { headers: { "apikey": serviceRoleKey, "Authorization": `Bearer ${serviceRoleKey}` } }
+      );
+      const json = await res.json();
+      const found = (json.users ?? []).find((u: any) => u.email?.toLowerCase() === em.toLowerCase());
+      return found?.id ?? null;
+    }
+
+    // Try to invite; if the email already exists, reuse the existing auth user
     let userId: string;
     const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
       email,
@@ -51,20 +65,13 @@ serve(async (req: Request) => {
     );
 
     if (inviteErr) {
-      // Email already registered — find the existing user
-      const { data: listData, error: listErr } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-      if (listErr) {
-        return new Response(JSON.stringify({ error: listErr.message }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const existing = listData.users.find((u: any) => u.email === email);
-      if (!existing) {
+      const existingId = await findUserByEmail(email);
+      if (!existingId) {
         return new Response(JSON.stringify({ error: inviteErr.message }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      userId = existing.id;
+      userId = existingId;
     } else {
       userId = inviteData.user.id;
     }
