@@ -7,6 +7,7 @@ import PatientDashboard from "./pages/patient/PatientDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import TreatmentPage from "./pages/treatments/TreatmentPage";
 import AppointmentResponse from "./pages/AppointmentResponse";
+import NuevaContrasena from "./pages/NuevaContrasena";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/cita" element={<AppointmentResponse />} />
           <Route path="/acceso-paciente" element={<PatientLogin />} />
           <Route path="/acceso-personal" element={<StaffLogin />} />
+          <Route path="/nueva-contrasena" element={<NuevaContrasena />} />
           <Route path="/paciente/*" element={<RequirePatient><PatientDashboard /></RequirePatient>} />
           <Route path="/admin/*" element={<RequireStaff><AdminDashboard /></RequireStaff>} />
           <Route path="*" element={<Navigate to="/" />} />

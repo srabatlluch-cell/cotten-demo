@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Lock, User, ArrowLeft, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Lock, User, ArrowLeft, ShieldCheck, Mail, CheckCircle } from "lucide-react";
 import { signIn } from "../lib/auth";
+import { supabase } from "../lib/supabase";
 
 export default function StaffLogin() {
   const navigate = useNavigate();
+  const [mode, setMode] = useState("login"); // 'login' | 'forgot' | 'forgot-sent'
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -23,6 +25,21 @@ export default function StaffLogin() {
       console.error('[StaffLogin] signIn error:', err)
       setError("Credenciales incorrectas. Por favor, inténtelo de nuevo.");
       setLoading(false);
+    }
+  };
+
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.toLowerCase().trim(), {
+      redirectTo: `${window.location.origin}/nueva-contrasena`,
+    });
+    setLoading(false);
+    if (resetErr) {
+      setError(resetErr.message);
+    } else {
+      setMode("forgot-sent");
     }
   };
 
@@ -55,58 +72,132 @@ export default function StaffLogin() {
             </div>
           </div>
 
-          <h2 className="text-2xl font-light text-white mb-2">Acceso Personal</h2>
-          <p className="text-white/40 text-sm mb-8">Introduzca su usuario y contraseña</p>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs uppercase tracking-wider text-white/50 mb-2">Usuario</label>
-              <div className="relative">
-                <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="correo@clinica.com"
-                  className="w-full pl-11 pr-4 py-3.5 rounded-xl text-sm text-white placeholder-white/20 outline-none"
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
-                  required
-                />
+          {mode === "forgot-sent" ? (
+            <>
+              <div className="text-center mb-6">
+                <CheckCircle size={44} className="mx-auto mb-4" style={{ color: "#c9a96e" }} />
+                <h2 className="text-2xl font-light text-white mb-2">Revisa tu correo</h2>
+                <p className="text-white/50 text-sm leading-relaxed">
+                  Hemos enviado un enlace a <strong className="text-white/70">{email}</strong>.
+                  Haz clic en él para establecer tu contraseña. El enlace caduca en 24 horas.
+                </p>
               </div>
-            </div>
+              <button
+                onClick={() => { setMode("login"); setError(""); }}
+                className="w-full py-3.5 rounded-xl text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-80"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)" }}
+              >
+                Volver al acceso
+              </button>
+            </>
+          ) : mode === "forgot" ? (
+            <>
+              <h2 className="text-2xl font-light text-white mb-2">Restablecer contraseña</h2>
+              <p className="text-white/40 text-sm mb-8">Te enviaremos un enlace para establecer una nueva contraseña</p>
 
-            <div>
-              <label className="block text-xs uppercase tracking-wider text-white/50 mb-2">Contraseña</label>
-              <div className="relative">
-                <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
-                <input
-                  type={showPass ? "text" : "password"}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-11 pr-11 py-3.5 rounded-xl text-sm text-white placeholder-white/20 outline-none"
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
-                  required
-                />
-                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
-                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              <form onSubmit={handleForgot} className="space-y-5">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/50 mb-2">Tu correo</label>
+                  <div className="relative">
+                    <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="correo@clinica.com"
+                      className="w-full pl-11 pr-4 py-3.5 rounded-xl text-sm text-white placeholder-white/20 outline-none"
+                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {error && <p className="text-sm text-center" style={{ color: "#f87171" }}>{error}</p>}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-4 rounded-xl text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-90 hover:scale-[1.02] disabled:opacity-70"
+                  style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)", color: "#1a2744" }}
+                >
+                  {loading ? "Enviando…" : "Enviar enlace"}
                 </button>
-              </div>
-            </div>
 
-            {error && (
-              <p className="text-sm text-center" style={{ color: "#f87171" }}>{error}</p>
-            )}
+                <button
+                  type="button"
+                  onClick={() => { setMode("login"); setError(""); }}
+                  className="w-full text-center text-white/30 text-xs hover:text-white/60 transition-colors"
+                >
+                  ← Volver al acceso
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-light text-white mb-2">Acceso Personal</h2>
+              <p className="text-white/40 text-sm mb-8">Introduzca su usuario y contraseña</p>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 rounded-xl text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-90 hover:scale-[1.02] disabled:opacity-70"
-              style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)", color: "#1a2744" }}
-            >
-              {loading ? "Verificando..." : "Acceder al Panel"}
-            </button>
-          </form>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/50 mb-2">Usuario</label>
+                  <div className="relative">
+                    <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="correo@clinica.com"
+                      className="w-full pl-11 pr-4 py-3.5 rounded-xl text-sm text-white placeholder-white/20 outline-none"
+                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs uppercase tracking-wider text-white/50">Contraseña</label>
+                    <button
+                      type="button"
+                      onClick={() => { setMode("forgot"); setError(""); }}
+                      className="text-xs transition-colors hover:underline"
+                      style={{ color: "#c9a96e" }}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                    <input
+                      type={showPass ? "text" : "password"}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-11 pr-11 py-3.5 rounded-xl text-sm text-white placeholder-white/20 outline-none"
+                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+                      required
+                    />
+                    <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                      {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="text-sm text-center" style={{ color: "#f87171" }}>{error}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-4 rounded-xl text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-90 hover:scale-[1.02] disabled:opacity-70"
+                  style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)", color: "#1a2744" }}
+                >
+                  {loading ? "Verificando..." : "Acceder al Panel"}
+                </button>
+              </form>
+            </>
+          )}
 
           <p className="text-center text-white/30 text-xs mt-8">
             ¿Es paciente?{" "}
