@@ -14,8 +14,11 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const json = (body: object, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  const respond = (body: object, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
 
   try {
     const supabaseUrl    = Deno.env.get("SUPABASE_URL")!;
@@ -23,58 +26,78 @@ serve(async (req: Request) => {
     const resendKey      = Deno.env.get("RESEND_API_KEY") ?? "";
     const fromAddr       = Deno.env.get("RESEND_FROM") ?? "Clínica Cotten <onboarding@resend.dev>";
 
-    const { email } = await req.json();
-    if (!email) return json({ error: "email es obligatorio" }, 400);
-    const normalizedEmail = email.toLowerCase().trim();
-
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Verify the user exists and has a staff profile
-    const { data: userId } = await adminClient.rpc("admin_find_auth_user_by_email", { p_email: normalizedEmail });
-    if (!userId) {
-      // Return ok anyway to avoid email enumeration
-      return json({ ok: true });
+    let body: { email?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return respond({ error: "Cuerpo de solicitud inválido." }, 400);
     }
 
-    const { data: profile } = await adminClient
+    const { email } = body;
+    if (!email) return respond({ error: "email es obligatorio" }, 400);
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // ── Verify user exists in auth ─────────────────────────────────────────
+    const { data: userId, error: findErr } = await adminClient.rpc(
+      "admin_find_auth_user_by_email",
+      { p_email: normalizedEmail }
+    );
+
+    if (findErr) {
+      console.error("[reset-password] admin_find_auth_user_by_email error:", findErr.message);
+    }
+
+    if (!userId) {
+      console.log("[reset-password] user not found, returning ok silently");
+      return respond({ ok: true }); // Don't reveal whether account exists
+    }
+
+    // ── Verify staff profile ───────────────────────────────────────────────
+    const { data: profile, error: profileErr } = await adminClient
       .from("profiles")
       .select("role, full_name")
       .eq("id", userId)
       .single();
 
+    if (profileErr) {
+      console.error("[reset-password] profile fetch error:", profileErr.message);
+    }
+
     const staffRoles = ["admin", "doctor", "staff", "receptionist"];
     if (!profile || !staffRoles.includes(profile.role)) {
-      return json({ ok: true }); // Don't reveal whether account exists
+      console.log("[reset-password] no staff profile found, returning ok silently");
+      return respond({ ok: true }); // Don't reveal whether account exists
     }
 
-    // Generate a recovery link via GoTrue admin API
-    const linkRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate-link`, {
-      method: "POST",
-      headers: {
-        "apikey":        serviceRoleKey,
-        "Authorization": `Bearer ${serviceRoleKey}`,
-        "Content-Type":  "application/json",
-      },
-      body: JSON.stringify({
-        type:        "recovery",
-        email:       normalizedEmail,
-        redirect_to: `${PORTAL_URL}/nueva-contrasena`,
-      }),
+    // ── Ensure email is confirmed so generateLink works ────────────────────
+    const { error: confirmErr } = await adminClient.auth.admin.updateUserById(userId, {
+      email_confirm: true,
+    });
+    if (confirmErr) {
+      console.warn("[reset-password] email confirm warning:", confirmErr.message);
+    }
+
+    // ── Generate recovery link via SDK ─────────────────────────────────────
+    const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
+      type: "recovery",
+      email: normalizedEmail,
+      options: { redirectTo: `${PORTAL_URL}/nueva-contrasena` },
     });
 
-    const linkJson = await linkRes.json();
-    console.log("[reset-password] generate-link status:", linkRes.status, JSON.stringify(linkJson).slice(0, 120));
-
-    if (!linkRes.ok || !linkJson.action_link) {
-      console.error("[reset-password] could not generate recovery link:", JSON.stringify(linkJson));
-      return json({ error: "No se pudo generar el enlace de recuperación." }, 500);
+    if (linkErr || !linkData?.properties?.action_link) {
+      console.error("[reset-password] generateLink error:", linkErr?.message ?? "no action_link", JSON.stringify(linkData));
+      return respond({ error: "No se pudo generar el enlace de recuperación. Contacta con el administrador." }, 500);
     }
 
-    const recoveryLink = linkJson.action_link;
+    const recoveryLink = linkData.properties.action_link;
+    console.log("[reset-password] recovery link generated for:", normalizedEmail);
 
+    // ── Send via Resend ────────────────────────────────────────────────────
     if (!resendKey) {
       console.error("[reset-password] RESEND_API_KEY missing");
-      return json({ error: "Configuración de email incompleta." }, 500);
+      return respond({ error: "Configuración de email incompleta." }, 500);
     }
 
     const emailHtml = `<!DOCTYPE html>
@@ -100,7 +123,7 @@ serve(async (req: Request) => {
       </a>
     </div>
     <p style="color:#9ca3af;font-size:12px;line-height:1.6;margin:24px 0 0;">
-      Este enlace es válido durante 1 hora y es de un solo uso. Si no solicitaste este cambio, puedes ignorar este correo.
+      Este enlace es válido durante 1 hora y es de un solo uso. Si no solicitaste este cambio, ignora este correo.
     </p>
   </td></tr>
   <tr><td style="background:#faf9f7;padding:20px 40px;text-align:center;border-top:1px solid #f3f0ea;">
@@ -130,13 +153,13 @@ serve(async (req: Request) => {
     console.log("[reset-password] Resend response:", resendRes.status, JSON.stringify(resendBody));
 
     if (!resendRes.ok) {
-      return json({ error: `Error enviando email: ${JSON.stringify(resendBody)}` }, 500);
+      return respond({ error: `Error enviando email: ${resendBody?.message ?? resendRes.status}` }, 500);
     }
 
-    return json({ ok: true });
+    return respond({ ok: true });
 
   } catch (err) {
     console.error("[reset-password] unexpected error:", err);
-    return json({ error: String(err?.message ?? err) }, 500);
+    return respond({ error: String(err?.message ?? err) }, 500);
   }
 });

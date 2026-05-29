@@ -60,9 +60,10 @@ export default function StaffLogin() {
         },
         body: JSON.stringify({ email: email.toLowerCase().trim() }),
       });
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        setError(json.error ?? "Error al enviar el correo.");
+      let data;
+      try { data = await res.json(); } catch { data = {}; }
+      if (!res.ok || data?.error) {
+        setError(data?.error ?? "Error al enviar el correo. Inténtalo de nuevo.");
       } else {
         setMode("forgot-sent");
       }
