@@ -83,13 +83,37 @@ serve(async (req: Request) => {
     // No custom redirectTo — use the Supabase site URL to avoid the
     // "Redirect URL not allowed" error. The app detects PASSWORD_RECOVERY
     // events globally and navigates to /nueva-contrasena automatically.
-    const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
+    let { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
       type: "recovery",
       email: normalizedEmail,
     });
 
+    // If generateLink failed, the user's auth.identities record was likely
+    // created via direct SQL (admin_create_patient) and is missing fields
+    // GoTrue requires. Fix the identity in-place and retry.
     if (linkErr || !linkData?.properties?.action_link) {
-      console.error("[reset-password] generateLink error:", linkErr?.message ?? "no action_link", JSON.stringify(linkData));
+      console.warn("[reset-password] generateLink failed, attempting identity repair:", linkErr?.message ?? "no action_link");
+
+      const { error: fixErr } = await adminClient.rpc("admin_fix_auth_identity", {
+        p_user_id: userId,
+        p_email:   normalizedEmail,
+      });
+
+      if (fixErr) {
+        console.error("[reset-password] identity repair failed:", fixErr.message);
+        return respond({ error: "No se pudo preparar la cuenta. Contacta con el administrador." }, 500);
+      }
+
+      const retry = await adminClient.auth.admin.generateLink({
+        type: "recovery",
+        email: normalizedEmail,
+      });
+      linkData = retry.data;
+      linkErr  = retry.error;
+    }
+
+    if (linkErr || !linkData?.properties?.action_link) {
+      console.error("[reset-password] generateLink still failing after repair:", linkErr?.message ?? "no action_link");
       return respond({ error: "No se pudo generar el enlace de recuperación. Contacta con el administrador." }, 500);
     }
 
