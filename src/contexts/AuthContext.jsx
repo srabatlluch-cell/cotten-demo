@@ -4,20 +4,17 @@ import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
-// Derive role instantly from email — no DB call required.
-// Staff addresses end with @clinica-cotten.com; everything else is a patient.
-function roleFromEmail(email) {
-  if (!email) return 'patient'
-  return email.endsWith('@clinica-cotten.com') ? 'admin' : 'patient'
-}
-
 // Build a minimal profile from the auth user so the UI is never blocked.
+// @clinica-cotten.com emails get 'admin' immediately; other emails get
+// 'unknown' so RequireStaff waits for the DB profile rather than
+// redirecting them to the patient area.
 function profileFromUser(user) {
+  const email = user.email ?? ''
   return {
     id:        user.id,
-    email:     user.email,
-    full_name: user.email,   // overwritten once the real DB row arrives
-    role:      roleFromEmail(user.email),
+    email,
+    full_name: email,
+    role:      email.endsWith('@clinica-cotten.com') ? 'admin' : 'unknown',
   }
 }
 
@@ -94,20 +91,26 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
+const STAFF_ROLES = ['admin', 'doctor', 'staff', 'receptionist']
+
 // Only patients may enter /paciente/* routes.
 export function RequirePatient({ children }) {
   const { user, profile, loading } = useAuth()
   if (loading) return null
   if (!user) return <Navigate to="/acceso-paciente" replace />
-  if (profile?.role && profile.role !== 'patient') return <Navigate to="/admin/panel" replace />
+  // Wait for DB profile to resolve before redirecting staff away
+  if (profile?.role === 'unknown') return null
+  if (STAFF_ROLES.includes(profile?.role)) return <Navigate to="/admin/panel" replace />
   return children
 }
 
-// Only staff / admin / doctor may enter /admin/* routes.
+// Only staff / admin / doctor / receptionist may enter /admin/* routes.
 export function RequireStaff({ children }) {
   const { user, profile, loading } = useAuth()
   if (loading) return null
   if (!user) return <Navigate to="/acceso-personal" replace />
+  // Wait for DB profile to resolve for non-clinic emails
+  if (profile?.role === 'unknown') return null
   if (profile?.role === 'patient') return <Navigate to="/paciente/inicio" replace />
   return children
 }

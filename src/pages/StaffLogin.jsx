@@ -19,10 +19,25 @@ export default function StaffLogin() {
     setLoading(true);
     try {
       const { user } = await signIn(email, password);
-      const isStaff = user.email?.endsWith("@clinica-cotten.com");
-      navigate(isStaff ? "/admin/panel" : "/paciente/inicio");
+
+      // Verify the user has a staff profile (not a patient accidentally using staff login)
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      const staffRoles = ["admin", "doctor", "staff", "receptionist"];
+      if (profileErr || !profile || !staffRoles.includes(profile.role)) {
+        await supabase.auth.signOut();
+        setError("No tienes acceso al panel. Contacta con el administrador.");
+        setLoading(false);
+        return;
+      }
+
+      navigate("/admin/panel");
     } catch (err) {
-      console.error('[StaffLogin] signIn error:', err)
+      console.error('[StaffLogin] signIn error:', err);
       setError("Credenciales incorrectas. Por favor, inténtelo de nuevo.");
       setLoading(false);
     }
