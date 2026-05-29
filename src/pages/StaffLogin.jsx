@@ -4,6 +4,8 @@ import { Eye, EyeOff, Lock, User, ArrowLeft, ShieldCheck, Mail, CheckCircle } fr
 import { signIn } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 
+const RESET_FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-password`;
+
 export default function StaffLogin() {
   const navigate = useNavigate();
   const [mode, setMode] = useState("login"); // 'login' | 'forgot' | 'forgot-sent'
@@ -47,14 +49,27 @@ export default function StaffLogin() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.toLowerCase().trim(), {
-      redirectTo: `${window.location.origin}/nueva-contrasena`,
-    });
-    setLoading(false);
-    if (resetErr) {
-      setError(resetErr.message);
-    } else {
-      setMode("forgot-sent");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(RESET_FN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ email: email.toLowerCase().trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setError(json.error ?? "Error al enviar el correo.");
+      } else {
+        setMode("forgot-sent");
+      }
+    } catch {
+      setError("Error de conexión. Inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
     }
   };
 
