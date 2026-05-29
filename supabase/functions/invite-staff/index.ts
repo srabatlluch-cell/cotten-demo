@@ -104,18 +104,35 @@ serve(async (req: Request) => {
     // ── Step 3: generate access link and send via Resend ──
     let emailWarning: string | null = null;
 
-    // Try invite type first (works for unconfirmed/pending users), fall back to magiclink
+    // Ensure the user is email-confirmed so GoTrue can generate any link type
+    await adminClient.auth.admin.updateUserById(userId, { email_confirm: true });
+
+    // Try generating the link via the GoTrue REST API directly (more compatible than SDK)
+    // Try magiclink first (no password needed), then recovery as fallback
     let accessLink: string | null = null;
-    for (const linkType of ["invite", "magiclink"] as const) {
-      const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
-        type: linkType,
-        email: normalizedEmail,
-        options: { redirectTo: `${PORTAL_URL}/acceso-personal` },
-      });
-      console.log(`[invite-staff] generateLink(${linkType}):`, linkErr?.message ?? "ok", "link:", linkData?.properties?.action_link?.slice(0, 60));
-      if (!linkErr && linkData?.properties?.action_link) {
-        accessLink = linkData.properties.action_link;
-        break;
+    for (const linkType of ["magiclink", "recovery", "invite"] as const) {
+      try {
+        const res = await fetch(`${supabaseUrl}/auth/v1/admin/generate-link`, {
+          method: "POST",
+          headers: {
+            "apikey": serviceRoleKey,
+            "Authorization": `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: linkType,
+            email: normalizedEmail,
+            redirect_to: `${PORTAL_URL}/acceso-personal`,
+          }),
+        });
+        const resJson = await res.json();
+        console.log(`[invite-staff] generateLink(${linkType}) status:`, res.status, "action_link:", resJson.action_link?.slice(0, 60) ?? resJson.error ?? resJson);
+        if (res.ok && resJson.action_link) {
+          accessLink = resJson.action_link;
+          break;
+        }
+      } catch (e) {
+        console.warn(`[invite-staff] generateLink(${linkType}) threw:`, e);
       }
     }
 
