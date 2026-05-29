@@ -53,36 +53,39 @@ serve(async (req: Request) => {
     );
 
     if (existingId) {
-      const { data: existingUser } = await adminClient.auth.admin.getUserById(existingId);
-      const hasLoggedIn = !!existingUser?.user?.last_sign_in_at;
+      // First try to reuse the existing user — confirm email and generate link directly.
+      // This works for proper GoTrue users without needing to delete anything.
+      console.log("[invite-staff] existing user found, trying to reuse:", existingId);
+      await adminClient.auth.admin.updateUserById(existingId, { email_confirm: true });
 
-      if (hasLoggedIn) {
-        // Active user — just update their profile and resend a password-reset link
-        console.log("[invite-staff] active user found, updating profile only:", existingId);
-        await adminClient.rpc("admin_upsert_staff_profile", {
-          p_id: existingId, p_full_name: full_name, p_email: normalizedEmail,
-          p_role: role, p_phone: phone || null, p_specialty: specialty || null,
-        });
-        return await sendSetPasswordEmail(
-          adminClient, resendKey, fromAddr, existingId, normalizedEmail, full_name, respond
-        );
+      // Upsert the profile with the existing user id
+      await adminClient.rpc("admin_upsert_staff_profile", {
+        p_id: existingId, p_full_name: full_name, p_email: normalizedEmail,
+        p_role: role, p_phone: phone || null, p_specialty: specialty || null,
+      });
+
+      const { data: linkData } = await adminClient.auth.admin.generateLink({
+        type: "recovery", email: normalizedEmail,
+      });
+
+      if (linkData?.properties?.action_link) {
+        // Existing user works fine — send the email and return
+        console.log("[invite-staff] reusing existing user, link generated OK");
+        return await sendEmail(resendKey, fromAddr, normalizedEmail, full_name, linkData.properties.action_link, respond);
       }
 
-      // Never logged in → safe to delete and recreate with proper GoTrue identity
-      console.log("[invite-staff] deleting unactivated user:", existingId);
-      // Try admin API first, then SQL function as fallback
-      await adminClient.auth.admin.deleteUser(existingId);
-      // Always also run SQL cleanup to remove rows from newer auth tables
-      // (one_time_tokens, flow_state, mfa_factors) that admin.deleteUser may leave behind
+      // generateLink failed → existing user has broken identity → must recreate
+      console.log("[invite-staff] generateLink failed for existing user, recreating...");
       await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
 
-      // Verify the user is truly gone before attempting to recreate
+      // Verify deletion
       const { data: stillExists } = await adminClient.rpc(
         "admin_find_auth_user_by_email", { p_email: normalizedEmail }
       );
       if (stillExists) {
-        console.error("[invite-staff] user still exists after deletion attempts:", normalizedEmail);
-        return respond({ error: "No se pudo limpiar la cuenta anterior. Ejecuta la migración 025 en Supabase SQL Editor." }, 500);
+        return respond({
+          error: "La cuenta no pudo eliminarse automáticamente. Ve a Supabase Dashboard → Authentication → Users, elimina manualmente el usuario con este email y vuelve a intentarlo."
+        }, 500);
       }
     }
 
@@ -111,9 +114,13 @@ serve(async (req: Request) => {
     }
 
     // ── Step 5: Generate set-password link and send email ─────────────────
-    return await sendSetPasswordEmail(
-      adminClient, resendKey, fromAddr, userId, normalizedEmail, full_name, respond
-    );
+    const { data: newLinkData, error: newLinkErr } = await adminClient.auth.admin.generateLink({
+      type: "recovery", email: normalizedEmail,
+    });
+    if (newLinkErr || !newLinkData?.properties?.action_link) {
+      return respond({ error: "No se pudo generar el enlace de acceso." }, 500);
+    }
+    return await sendEmail(resendKey, fromAddr, normalizedEmail, full_name, newLinkData.properties.action_link, respond);
 
   } catch (err) {
     console.error("[invite-staff] unexpected error:", err);
@@ -124,30 +131,14 @@ serve(async (req: Request) => {
   }
 });
 
-async function sendSetPasswordEmail(
-  adminClient: any,
+async function sendEmail(
   resendKey: string,
   fromAddr: string,
-  userId: string,
   email: string,
   fullName: string,
+  actionLink: string,
   respond: (body: object, status?: number) => Response
 ): Promise<Response> {
-  // Generate a recovery link — fires PASSWORD_RECOVERY in the browser,
-  // which AuthContext catches and redirects to /nueva-contrasena
-  const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
-    type: "recovery",
-    email,
-  });
-
-  if (linkErr || !linkData?.properties?.action_link) {
-    console.error("[invite-staff] generateLink error:", linkErr?.message ?? "no action_link");
-    return respond({ error: "No se pudo generar el enlace de acceso." }, 500);
-  }
-
-  const actionLink = linkData.properties.action_link;
-  console.log("[invite-staff] recovery link generated for:", email);
-
   if (!resendKey) {
     return respond({ error: "RESEND_API_KEY no configurado." }, 500);
   }
