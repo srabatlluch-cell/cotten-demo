@@ -102,29 +102,36 @@ serve(async (req: Request) => {
     }
 
     // ── Step 3: generate access link and send via Resend ──
-    // Use 'recovery' so the user can set/reset their password and log in.
-    // This works for both new invites and existing accounts.
-    try {
+    let emailWarning: string | null = null;
+
+    // Try invite type first (works for unconfirmed/pending users), fall back to magiclink
+    let accessLink: string | null = null;
+    for (const linkType of ["invite", "magiclink"] as const) {
       const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
-        type: "recovery",
+        type: linkType,
         email: normalizedEmail,
         options: { redirectTo: `${PORTAL_URL}/acceso-personal` },
       });
-
+      console.log(`[invite-staff] generateLink(${linkType}):`, linkErr?.message ?? "ok", "link:", linkData?.properties?.action_link?.slice(0, 60));
       if (!linkErr && linkData?.properties?.action_link) {
-        const accessLink = linkData.properties.action_link;
-        const resendKey  = Deno.env.get("RESEND_API_KEY") ?? "";
-        const fromAddr   = Deno.env.get("RESEND_FROM") ?? "Clínica Cotten <onboarding@resend.dev>";
+        accessLink = linkData.properties.action_link;
+        break;
+      }
+    }
 
-        if (resendKey) {
-          await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${resendKey}` },
-            body: JSON.stringify({
-              from: fromAddr,
-              to:   normalizedEmail,
-              subject: "Acceso al Portal de Clínica Cotten",
-              html: `
+    if (accessLink) {
+      const resendKey = Deno.env.get("RESEND_API_KEY") ?? "";
+      const fromAddr  = Deno.env.get("RESEND_FROM") ?? "Clínica Cotten <onboarding@resend.dev>";
+      console.log("[invite-staff] resendKey present:", !!resendKey, "from:", fromAddr, "to:", normalizedEmail);
+
+      const resendRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${resendKey}` },
+        body: JSON.stringify({
+          from:    fromAddr,
+          to:      normalizedEmail,
+          subject: "Acceso al Portal de Clínica Cotten",
+          html: `
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background:#f5f3ef;font-family:Georgia,serif;">
@@ -136,17 +143,15 @@ serve(async (req: Request) => {
     <h1 style="color:#fff;font-size:22px;margin:0;">Bienvenido al equipo</h1>
   </td></tr>
   <tr><td style="padding:32px 40px;">
-    <p style="color:#374151;font-size:15px;line-height:1.7;margin:0 0 16px;">
-      Hola <strong>${full_name}</strong>,
-    </p>
+    <p style="color:#374151;font-size:15px;line-height:1.7;margin:0 0 16px;">Hola <strong>${full_name}</strong>,</p>
     <p style="color:#374151;font-size:15px;line-height:1.7;margin:0 0 24px;">
       Has sido añadido como miembro del equipo de Clínica Cotten con el rol de <strong>${role}</strong>.
-      Haz clic en el botón para establecer tu contraseña y acceder al portal.
+      Haz clic en el botón para acceder al portal y establecer tu contraseña.
     </p>
     <div style="text-align:center;margin:32px 0;">
       <a href="${accessLink}"
          style="display:inline-block;background:linear-gradient(135deg,#1a2744,#243256);color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">
-        Establecer contraseña y acceder
+        Acceder al portal
       </a>
     </div>
     <p style="color:#9ca3af;font-size:12px;line-height:1.6;margin:24px 0 0;">
@@ -156,22 +161,21 @@ serve(async (req: Request) => {
   <tr><td style="background:#faf9f7;padding:20px 40px;text-align:center;border-top:1px solid #f3f0ea;">
     <p style="color:#9ca3af;font-size:11px;margin:0;">Clínica Cotten · Portal de Gestión</p>
   </td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`,
-            }),
-          });
-        }
-      } else {
-        console.warn("[invite-staff] generateLink failed (non-fatal):", linkErr?.message);
+</table></td></tr></table>
+</body></html>`,
+        }),
+      });
+      const resendBody = await resendRes.json();
+      console.log("[invite-staff] Resend status:", resendRes.status, "body:", JSON.stringify(resendBody));
+      if (!resendRes.ok) {
+        emailWarning = `Email no enviado: ${JSON.stringify(resendBody)}`;
       }
-    } catch (emailErr) {
-      console.warn("[invite-staff] email send failed (non-fatal):", emailErr);
+    } else {
+      emailWarning = "No se pudo generar el enlace de acceso.";
+      console.warn("[invite-staff] could not generate any link for:", normalizedEmail);
     }
 
-    return json({ ok: true, id: userId });
+    return json({ ok: true, id: userId, emailWarning });
 
   } catch (err) {
     console.error("[invite-staff] unexpected error:", err);

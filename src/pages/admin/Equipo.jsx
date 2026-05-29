@@ -70,6 +70,10 @@ function InviteModal({ onClose, onInvited }) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error al invitar");
+      if (json.emailWarning) {
+        console.warn("[Equipo] email warning:", json.emailWarning);
+        setError(`Miembro añadido, pero el email falló: ${json.emailWarning}`);
+      }
       onInvited({
         id:        json.id,
         full_name: form.full_name,
