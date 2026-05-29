@@ -14,66 +14,64 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  try {
-    // Service role client — bypasses RLS for auth checks
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+  const json = (body: object, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Verify caller is authenticated (valid Supabase JWT)
+  try {
+    const supabaseUrl    = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // Verify caller is authenticated
     const authHeader = req.headers.get("Authorization") ?? "";
     const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
+      supabaseUrl,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
     const { data: { user }, error: authErr } = await anonClient.auth.getUser();
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (authErr || !user) return json({ error: "Unauthorized" }, 401);
 
-    // Parse body
     const { email, full_name, role, phone, specialty } = await req.json();
-    if (!email || !full_name || !role) {
-      return new Response(JSON.stringify({ error: "email, full_name y role son obligatorios" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!email || !full_name || !role) return json({ error: "email, full_name y role son obligatorios" }, 400);
 
-    const supabaseUrl    = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Helper: find an existing auth user by email via the GoTrue REST API
-    async function findUserByEmail(em: string): Promise<string | null> {
+    // Find an existing auth user by email via GoTrue REST API
+    async function findAuthUserId(em: string): Promise<string | null> {
       const res = await fetch(
-        `${supabaseUrl}/auth/v1/admin/users?filter=${encodeURIComponent(em)}&page=1&per_page=100`,
+        `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1000`,
         { headers: { "apikey": serviceRoleKey, "Authorization": `Bearer ${serviceRoleKey}` } }
       );
-      const json = await res.json();
-      const found = (json.users ?? []).find((u: any) => u.email?.toLowerCase() === em.toLowerCase());
+      const data = await res.json();
+      console.log("[invite-staff] listUsers status:", res.status, "total:", data.users?.length ?? 0);
+      const found = (data.users ?? []).find((u: any) => u.email?.toLowerCase() === em.toLowerCase());
+      console.log("[invite-staff] found existing user:", found?.id ?? "none");
       return found?.id ?? null;
     }
 
-    // Try to invite; if the email already exists, reuse the existing auth user
     let userId: string;
-    const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
-      email,
-      { redirectTo: `${PORTAL_URL}/acceso-personal` }
-    );
 
-    if (inviteErr) {
-      const existingId = await findUserByEmail(email);
-      if (!existingId) {
-        return new Response(JSON.stringify({ error: inviteErr.message }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // Check first if user already exists to avoid trigger errors
+    const existingId = await findAuthUserId(email);
+
+    if (existingId) {
+      // User already in auth — just update their profile, no invite needed
       userId = existingId;
+      console.log("[invite-staff] user already exists, updating profile:", userId);
     } else {
+      // Clean up any stale profile row that could block the auth trigger
+      await adminClient.from("profiles").delete().eq("email", email);
+
+      const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
+        email,
+        { redirectTo: `${PORTAL_URL}/acceso-personal` }
+      );
+      if (inviteErr) {
+        console.error("[invite-staff] inviteUserByEmail error:", inviteErr.message);
+        return json({ error: inviteErr.message }, 400);
+      }
       userId = inviteData.user.id;
+      console.log("[invite-staff] invited new user:", userId);
     }
 
     // Upsert the profile with name, role, phone, specialty
@@ -88,19 +86,14 @@ serve(async (req: Request) => {
         specialty: specialty || null,
       });
     if (profileErr) {
-      return new Response(JSON.stringify({ error: profileErr.message }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("[invite-staff] profile upsert error:", profileErr.message);
+      return json({ error: profileErr.message }, 500);
     }
 
-    return new Response(JSON.stringify({ ok: true, id: userId }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ ok: true, id: userId });
 
   } catch (err) {
     console.error("[invite-staff] error:", err);
-    return new Response(JSON.stringify({ error: err.message ?? "Error interno" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: err.message ?? "Error interno" }, 500);
   }
 });
