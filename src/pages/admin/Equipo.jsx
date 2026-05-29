@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Mail, Phone, Shield, Pencil, X, Save, Loader2, AlertCircle, UserPlus } from "lucide-react";
+import { Mail, Phone, Shield, Pencil, X, Save, Loader2, AlertCircle, UserPlus, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const INVITE_FN_URL     = `${SUPABASE_URL}/functions/v1/invite-staff`;
+const DELETE_FN_URL     = `${SUPABASE_URL}/functions/v1/delete-user`;
 
 // ─── role config ──────────────────────────────────────────────────────────────
 
@@ -256,11 +257,13 @@ function EditModal({ member, onClose, onSaved }) {
 // ─── main component ───────────────────────────────────────────────────────────
 
 export default function Equipo() {
-  const [members,  setMembers]  = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState("");
-  const [editing,  setEditing]  = useState(null);
-  const [inviting, setInviting] = useState(false);
+  const [members,       setMembers]       = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState("");
+  const [editing,       setEditing]       = useState(null);
+  const [inviting,      setInviting]      = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting,      setDeleting]      = useState(null);
 
   useEffect(() => {
     supabase.rpc("get_staff_members")
@@ -280,6 +283,30 @@ export default function Equipo() {
   function handleInvited(newMember) {
     setMembers(prev => [...prev, newMember]);
     setInviting(false);
+  }
+
+  async function handleDelete(member) {
+    setDeleting(member.id);
+    setConfirmDelete(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(DELETE_FN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+          "apikey":        SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ user_id: member.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Error al eliminar");
+      setMembers(prev => prev.filter(m => m.id !== member.id));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(null);
+    }
   }
 
   if (loading) {
@@ -334,14 +361,26 @@ export default function Equipo() {
 
             return (
               <div key={member.id} className="bg-white rounded-2xl p-6 relative group" style={{ border: "1px solid #e5e0d8" }}>
-                {/* Edit button */}
-                <button
-                  onClick={() => setEditing(member)}
-                  className="absolute top-4 right-4 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-100"
-                  title="Editar"
-                >
-                  <Pencil size={13} style={{ color: "#9ca3af" }} />
-                </button>
+                {/* Action buttons */}
+                <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => setEditing(member)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                    title="Editar"
+                  >
+                    <Pencil size={13} style={{ color: "#9ca3af" }} />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(member)}
+                    disabled={deleting === member.id}
+                    className="p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                    title="Eliminar miembro"
+                  >
+                    {deleting === member.id
+                      ? <Loader2 size={13} className="animate-spin" style={{ color: "#dc2626" }} />
+                      : <Trash2 size={13} style={{ color: "#dc2626" }} />}
+                  </button>
+                </div>
 
                 <div className="flex items-start gap-4 mb-4">
                   <div
@@ -411,6 +450,45 @@ export default function Equipo() {
           onClose={() => setInviting(false)}
           onInvited={handleInvited}
         />
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="px-6 pt-6 pb-2 flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#fef2f2" }}>
+                <Trash2 size={18} style={{ color: "#dc2626" }} />
+              </div>
+              <div>
+                <h2 className="font-semibold" style={{ color: "#1a2744" }}>Eliminar miembro del equipo</h2>
+                <p className="text-sm mt-1" style={{ color: "#6b7280" }}>
+                  ¿Eliminar a <strong>{confirmDelete.full_name}</strong> permanentemente?
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4">
+              <div className="rounded-xl px-4 py-3 text-sm" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#7f1d1d", lineHeight: 1.6 }}>
+                Esta acción es <strong>irreversible</strong>. Se eliminará la cuenta de acceso del miembro. <strong>No podrá iniciar sesión</strong> hasta que sea invitado de nuevo.
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm transition-all"
+                style={{ border: "1px solid #e5e0d8", color: "#6b7280" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDelete(confirmDelete)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90 flex items-center justify-center gap-2"
+                style={{ background: "#dc2626", color: "white" }}
+              >
+                <Trash2 size={14} /> Eliminar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

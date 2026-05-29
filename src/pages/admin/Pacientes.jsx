@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
-import { Search, ChevronRight, UserPlus, X, Loader2, AlertCircle, Archive, ArchiveRestore, AlertTriangle } from "lucide-react";
+import { Search, ChevronRight, UserPlus, X, Loader2, AlertCircle, Archive, ArchiveRestore, AlertTriangle, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { patientStatus } from "../../lib/statusStyles";
 import { sendWelcomeEmail } from "../../lib/email";
+
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const DELETE_FN_URL     = `${SUPABASE_URL}/functions/v1/delete-user`;
 
 async function fetchPatients() {
   const { data, error } = await supabase.rpc("get_all_patients");
@@ -36,8 +40,12 @@ export default function Pacientes() {
   const [createError,    setCreateError]    = useState("");
 
   // Archive confirmation dialog state
-  const [confirmArchive, setConfirmArchive] = useState(null); // patient object or null
-  const [archiving,      setArchiving]      = useState(null); // patient id being processed
+  const [confirmArchive, setConfirmArchive] = useState(null);
+  const [archiving,      setArchiving]      = useState(null);
+
+  // Delete confirmation state
+  const [confirmDelete,  setConfirmDelete]  = useState(null);
+  const [deleting,       setDeleting]       = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +168,31 @@ export default function Pacientes() {
     }
   }
 
+  async function handleDelete(patient) {
+    setDeleting(patient.patient_id);
+    setConfirmDelete(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(DELETE_FN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+          "apikey":        SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ user_id: patient.profile_id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Error al eliminar");
+      setPatients(prev => prev.filter(p => p.patient_id !== patient.patient_id));
+      setArchived(prev => prev.filter(p => p.patient_id !== patient.patient_id));
+    } catch (err) {
+      console.error("[Pacientes] delete error:", err);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   async function handleUnarchive(patient) {
     setArchiving(patient.patient_id);
     try {
@@ -272,12 +305,21 @@ export default function Pacientes() {
                         <div className="flex items-center gap-1 justify-end">
                           <button
                             onClick={() => setConfirmArchive(p)}
-                            disabled={isArchiving}
+                            disabled={isArchiving || deleting === p.patient_id}
                             title="Archivar paciente"
                             className="p-1.5 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50"
                             style={{ color: "#d97706" }}
                           >
                             {isArchiving ? <Loader2 size={15} className="animate-spin" /> : <Archive size={15} />}
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(p)}
+                            disabled={isArchiving || deleting === p.patient_id}
+                            title="Eliminar paciente"
+                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                            style={{ color: "#dc2626" }}
+                          >
+                            {deleting === p.patient_id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                           </button>
                           <Link to={`/admin/pacientes/${p.patient_id}`} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 inline-flex">
                             <ChevronRight size={16} />
@@ -355,18 +397,27 @@ export default function Pacientes() {
                             : "—"}
                         </td>
                         <td className="px-6 py-4">
-                          <button
-                            onClick={() => handleUnarchive(p)}
-                            disabled={isUnarchiving}
-                            title="Restaurar paciente"
-                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all hover:bg-green-50 disabled:opacity-50"
-                            style={{ border: "1px solid #d1fae5", color: "#059669" }}
-                          >
-                            {isUnarchiving
-                              ? <Loader2 size={12} className="animate-spin" />
-                              : <ArchiveRestore size={12} />}
-                            Restaurar
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleUnarchive(p)}
+                              disabled={isUnarchiving || deleting === p.patient_id}
+                              title="Restaurar paciente"
+                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all hover:bg-green-50 disabled:opacity-50"
+                              style={{ border: "1px solid #d1fae5", color: "#059669" }}
+                            >
+                              {isUnarchiving ? <Loader2 size={12} className="animate-spin" /> : <ArchiveRestore size={12} />}
+                              Restaurar
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(p)}
+                              disabled={isUnarchiving || deleting === p.patient_id}
+                              title="Eliminar permanentemente"
+                              className="p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                              style={{ color: "#dc2626" }}
+                            >
+                              {deleting === p.patient_id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -412,6 +463,46 @@ export default function Pacientes() {
                 style={{ background: "#d97706", color: "white" }}
               >
                 <Archive size={14} /> Archivar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirmation dialog ──────────────────────────────────────── */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="px-6 pt-6 pb-2 flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#fef2f2" }}>
+                <Trash2 size={18} style={{ color: "#dc2626" }} />
+              </div>
+              <div>
+                <h2 className="font-semibold" style={{ color: "#1a2744" }}>Eliminar paciente</h2>
+                <p className="text-sm mt-1" style={{ color: "#6b7280" }}>
+                  ¿Eliminar a <strong>{confirmDelete.full_name}</strong> permanentemente?
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4">
+              <div className="rounded-xl px-4 py-3 text-sm" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#7f1d1d", lineHeight: 1.6 }}>
+                Esta acción es <strong>irreversible</strong>. Se eliminarán todos sus datos y su cuenta de acceso. <strong>No podrá volver a iniciar sesión</strong> con este email a menos que sea registrado de nuevo.
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm transition-all"
+                style={{ border: "1px solid #e5e0d8", color: "#6b7280" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDelete(confirmDelete)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90 flex items-center justify-center gap-2"
+                style={{ background: "#dc2626", color: "white" }}
+              >
+                <Trash2 size={14} /> Eliminar definitivamente
               </button>
             </div>
           </div>
