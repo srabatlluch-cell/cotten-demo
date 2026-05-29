@@ -43,9 +43,11 @@ serve(async (req: Request) => {
     // 2. Delete from profiles table (best-effort — may already cascade from auth)
     await adminClient.from("profiles").delete().eq("id", user_id);
 
-    // 3. Delete auth user — this is the critical step (blocks login)
+    // 3. Delete auth user — best-effort (patient may have no auth account)
     const { error: deleteErr } = await adminClient.auth.admin.deleteUser(user_id);
-    if (deleteErr) return json({ error: deleteErr.message }, 400);
+    if (deleteErr && !deleteErr.message.toLowerCase().includes("not found")) {
+      return json({ error: deleteErr.message }, 400);
+    }
 
     return json({ ok: true });
 
