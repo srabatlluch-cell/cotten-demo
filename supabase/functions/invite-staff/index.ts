@@ -70,11 +70,19 @@ serve(async (req: Request) => {
 
       // Never logged in → safe to delete and recreate with proper GoTrue identity
       console.log("[invite-staff] deleting unactivated user:", existingId);
-      // Use the admin API (not SQL) so GoTrue cleans up ALL internal tables
-      const { error: delErr } = await adminClient.auth.admin.deleteUser(existingId);
-      if (delErr) {
-        console.warn("[invite-staff] admin.deleteUser failed, trying SQL fallback:", delErr.message);
-        await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
+      // Try admin API first, then SQL function as fallback
+      await adminClient.auth.admin.deleteUser(existingId);
+      // Always also run SQL cleanup to remove rows from newer auth tables
+      // (one_time_tokens, flow_state, mfa_factors) that admin.deleteUser may leave behind
+      await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
+
+      // Verify the user is truly gone before attempting to recreate
+      const { data: stillExists } = await adminClient.rpc(
+        "admin_find_auth_user_by_email", { p_email: normalizedEmail }
+      );
+      if (stillExists) {
+        console.error("[invite-staff] user still exists after deletion attempts:", normalizedEmail);
+        return respond({ error: "No se pudo limpiar la cuenta anterior. Ejecuta la migración 025 en Supabase SQL Editor." }, 500);
       }
     }
 
