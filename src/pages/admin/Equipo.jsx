@@ -70,10 +70,8 @@ function InviteModal({ onClose, onInvited }) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error al invitar");
-      if (json.emailWarning) {
-        console.warn("[Equipo] email warning:", json.emailWarning);
-        setError(`Miembro añadido, pero el email falló: ${json.emailWarning}`);
-      }
+      console.log("[Equipo] invite result:", json);
+      // Always add the member to the list
       onInvited({
         id:        json.id,
         full_name: form.full_name,
@@ -82,6 +80,10 @@ function InviteModal({ onClose, onInvited }) {
         phone:     form.phone     || null,
         specialty: form.specialty || null,
       });
+      // If email failed, show warning AFTER modal closes via parent state
+      if (json.emailWarning) {
+        console.warn("[Equipo] email warning:", json.emailWarning);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
