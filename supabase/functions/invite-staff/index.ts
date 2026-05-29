@@ -101,6 +101,76 @@ serve(async (req: Request) => {
       return json({ error: profileErr.message }, 500);
     }
 
+    // ── Step 3: generate access link and send via Resend ──
+    // Use 'recovery' so the user can set/reset their password and log in.
+    // This works for both new invites and existing accounts.
+    try {
+      const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
+        type: "recovery",
+        email: normalizedEmail,
+        options: { redirectTo: `${PORTAL_URL}/acceso-personal` },
+      });
+
+      if (!linkErr && linkData?.properties?.action_link) {
+        const accessLink = linkData.properties.action_link;
+        const resendKey  = Deno.env.get("RESEND_API_KEY") ?? "";
+        const fromAddr   = Deno.env.get("RESEND_FROM") ?? "Clínica Cotten <onboarding@resend.dev>";
+
+        if (resendKey) {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${resendKey}` },
+            body: JSON.stringify({
+              from: fromAddr,
+              to:   normalizedEmail,
+              subject: "Acceso al Portal de Clínica Cotten",
+              html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f5f3ef;font-family:Georgia,serif;">
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr><td align="center" style="padding:40px 16px;">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e0d8;">
+  <tr><td style="background:linear-gradient(135deg,#1a2744,#243256);padding:32px 40px;">
+    <p style="color:#c9a96e;font-size:13px;margin:0 0 4px;">CLÍNICA COTTEN</p>
+    <h1 style="color:#fff;font-size:22px;margin:0;">Bienvenido al equipo</h1>
+  </td></tr>
+  <tr><td style="padding:32px 40px;">
+    <p style="color:#374151;font-size:15px;line-height:1.7;margin:0 0 16px;">
+      Hola <strong>${full_name}</strong>,
+    </p>
+    <p style="color:#374151;font-size:15px;line-height:1.7;margin:0 0 24px;">
+      Has sido añadido como miembro del equipo de Clínica Cotten con el rol de <strong>${role}</strong>.
+      Haz clic en el botón para establecer tu contraseña y acceder al portal.
+    </p>
+    <div style="text-align:center;margin:32px 0;">
+      <a href="${accessLink}"
+         style="display:inline-block;background:linear-gradient(135deg,#1a2744,#243256);color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">
+        Establecer contraseña y acceder
+      </a>
+    </div>
+    <p style="color:#9ca3af;font-size:12px;line-height:1.6;margin:24px 0 0;">
+      Este enlace es válido durante 24 horas. Si no esperabas este email, puedes ignorarlo.
+    </p>
+  </td></tr>
+  <tr><td style="background:#faf9f7;padding:20px 40px;text-align:center;border-top:1px solid #f3f0ea;">
+    <p style="color:#9ca3af;font-size:11px;margin:0;">Clínica Cotten · Portal de Gestión</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`,
+            }),
+          });
+        }
+      } else {
+        console.warn("[invite-staff] generateLink failed (non-fatal):", linkErr?.message);
+      }
+    } catch (emailErr) {
+      console.warn("[invite-staff] email send failed (non-fatal):", emailErr);
+    }
+
     return json({ ok: true, id: userId });
 
   } catch (err) {
