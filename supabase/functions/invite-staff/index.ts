@@ -36,55 +36,68 @@ serve(async (req: Request) => {
     const { email, full_name, role, phone, specialty } = await req.json();
     if (!email || !full_name || !role) return json({ error: "email, full_name y role son obligatorios" }, 400);
 
-    // Find an existing auth user by email via GoTrue REST API
-    async function findAuthUserId(em: string): Promise<string | null> {
-      const res = await fetch(
-        `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1000`,
-        { headers: { "apikey": serviceRoleKey, "Authorization": `Bearer ${serviceRoleKey}` } }
-      );
-      const data = await res.json();
-      console.log("[invite-staff] listUsers status:", res.status, "total:", data.users?.length ?? 0);
-      const found = (data.users ?? []).find((u: any) => u.email?.toLowerCase() === em.toLowerCase());
-      console.log("[invite-staff] found existing user:", found?.id ?? "none");
-      return found?.id ?? null;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // ── Step 1: check auth.users directly via SQL (bypasses GoTrue quirks) ──
+    const { data: existingId, error: findErr } = await adminClient.rpc(
+      "admin_find_auth_user_by_email",
+      { p_email: normalizedEmail }
+    );
+
+    if (findErr) {
+      console.error("[invite-staff] admin_find_auth_user_by_email error:", findErr.message);
+      return json({ error: findErr.message }, 500);
     }
 
     let userId: string;
 
-    // Check first if user already exists to avoid trigger errors
-    const existingId = await findAuthUserId(email);
-
     if (existingId) {
-      // User already in auth — just update their profile, no invite needed
+      // ── User already exists in auth.users — reuse their account ──
+      console.log("[invite-staff] existing auth user found:", existingId);
       userId = existingId;
-      console.log("[invite-staff] user already exists, updating profile:", userId);
     } else {
-      // Clean up any stale profile row that could block the auth trigger
-      await adminClient.from("profiles").delete().eq("email", email);
+      // ── User does not exist — clean up any orphaned data then invite ──
+      console.log("[invite-staff] no existing auth user, cleaning up and inviting:", normalizedEmail);
+
+      // Remove any stale profile row by email that would block a trigger
+      await adminClient.from("profiles").delete().eq("email", normalizedEmail);
 
       const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
-        email,
+        normalizedEmail,
         { redirectTo: `${PORTAL_URL}/acceso-personal` }
       );
+
       if (inviteErr) {
-        console.error("[invite-staff] inviteUserByEmail error:", inviteErr.message);
-        return json({ error: inviteErr.message }, 400);
+        // Invite still failed — force-delete any zombie auth record and retry once
+        console.error("[invite-staff] invite failed:", inviteErr.message, "— force-deleting and retrying");
+        await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
+
+        const { data: retryData, error: retryErr } = await adminClient.auth.admin.inviteUserByEmail(
+          normalizedEmail,
+          { redirectTo: `${PORTAL_URL}/acceso-personal` }
+        );
+        if (retryErr) {
+          console.error("[invite-staff] retry also failed:", retryErr.message);
+          return json({ error: retryErr.message }, 400);
+        }
+        userId = retryData.user.id;
+      } else {
+        userId = inviteData.user.id;
       }
-      userId = inviteData.user.id;
-      console.log("[invite-staff] invited new user:", userId);
     }
 
-    // Upsert the profile with name, role, phone, specialty
+    // ── Step 2: upsert profile with staff role ──
     const { error: profileErr } = await adminClient
       .from("profiles")
       .upsert({
         id:        userId,
         full_name,
-        email,
+        email:     normalizedEmail,
         role,
         phone:     phone     || null,
         specialty: specialty || null,
       });
+
     if (profileErr) {
       console.error("[invite-staff] profile upsert error:", profileErr.message);
       return json({ error: profileErr.message }, 500);
@@ -93,7 +106,7 @@ serve(async (req: Request) => {
     return json({ ok: true, id: userId });
 
   } catch (err) {
-    console.error("[invite-staff] error:", err);
+    console.error("[invite-staff] unexpected error:", err);
     return json({ error: err.message ?? "Error interno" }, 500);
   }
 });
