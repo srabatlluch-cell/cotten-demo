@@ -80,10 +80,12 @@ serve(async (req: Request) => {
     }
 
     // ── Generate recovery link via SDK ─────────────────────────────────────
+    // No custom redirectTo — use the Supabase site URL to avoid the
+    // "Redirect URL not allowed" error. The app detects PASSWORD_RECOVERY
+    // events globally and navigates to /nueva-contrasena automatically.
     const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
       type: "recovery",
       email: normalizedEmail,
-      options: { redirectTo: `${PORTAL_URL}/nueva-contrasena` },
     });
 
     if (linkErr || !linkData?.properties?.action_link) {

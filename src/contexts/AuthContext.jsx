@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let mounted = true
@@ -43,6 +44,12 @@ export function AuthProvider({ children }) {
       (event, session) => {
         if (!mounted) return
         console.log('[Auth]', event, session?.user?.email ?? '(signed out)')
+
+        // When a password-reset link is clicked, redirect to the set-password page
+        if (event === 'PASSWORD_RECOVERY') {
+          navigate('/nueva-contrasena', { replace: true })
+          return
+        }
 
         if (session?.user) {
           // 1. Set role immediately from email — unblocks navigation at once.
