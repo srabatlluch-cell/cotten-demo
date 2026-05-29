@@ -86,17 +86,15 @@ serve(async (req: Request) => {
       }
     }
 
-    // ── Step 2: upsert profile with staff role ──
-    const { error: profileErr } = await adminClient
-      .from("profiles")
-      .upsert({
-        id:        userId,
-        full_name,
-        email:     normalizedEmail,
-        role,
-        phone:     phone     || null,
-        specialty: specialty || null,
-      });
+    // ── Step 2: upsert profile via SECURITY DEFINER function (postgres perms) ──
+    const { error: profileErr } = await adminClient.rpc("admin_upsert_staff_profile", {
+      p_id:        userId,
+      p_full_name: full_name,
+      p_email:     normalizedEmail,
+      p_role:      role,
+      p_phone:     phone     || null,
+      p_specialty: specialty || null,
+    });
 
     if (profileErr) {
       console.error("[invite-staff] profile upsert error:", profileErr.message);
