@@ -71,8 +71,12 @@ serve(async (req: Request) => {
       // Save profile data before deletion
       const savedProfile = { ...profile };
 
-      // Delete the broken auth user (cascades to profiles table)
-      await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
+      // Delete via admin API so GoTrue cleans up ALL internal tables
+      const { error: delErr } = await adminClient.auth.admin.deleteUser(userId);
+      if (delErr) {
+        console.warn("[reset-password] admin.deleteUser failed, trying SQL fallback:", delErr.message);
+        await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
+      }
 
       // Create fresh GoTrue user
       const { data: newUserData, error: createErr } = await adminClient.auth.admin.createUser({

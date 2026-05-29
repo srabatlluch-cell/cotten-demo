@@ -70,7 +70,12 @@ serve(async (req: Request) => {
 
       // Never logged in → safe to delete and recreate with proper GoTrue identity
       console.log("[invite-staff] deleting unactivated user:", existingId);
-      await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
+      // Use the admin API (not SQL) so GoTrue cleans up ALL internal tables
+      const { error: delErr } = await adminClient.auth.admin.deleteUser(existingId);
+      if (delErr) {
+        console.warn("[invite-staff] admin.deleteUser failed, trying SQL fallback:", delErr.message);
+        await adminClient.rpc("admin_force_delete_auth_by_email", { p_email: normalizedEmail });
+      }
     }
 
     // ── Step 2: Create a fresh GoTrue user via inviteUserByEmail ──────────
