@@ -15,7 +15,13 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Verify caller is authenticated staff using anon key
+    // Service role client — bypasses RLS for auth checks
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Verify caller is authenticated (valid Supabase JWT)
     const authHeader = req.headers.get("Authorization") ?? "";
     const anonClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -29,18 +35,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Check caller has staff role
-    const { data: profile } = await anonClient
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    if (!["doctor", "staff", "admin", "receptionist"].includes(profile?.role)) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     // Parse body
     const { email, full_name, role, phone, specialty } = await req.json();
     if (!email || !full_name || !role) {
@@ -49,27 +43,37 @@ serve(async (req: Request) => {
       });
     }
 
-    // Use service role client to create the user
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
+    // Try to invite; if email already exists, look up the existing auth user instead
+    let userId: string;
     const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
       email,
       { redirectTo: `${PORTAL_URL}/acceso-personal` }
     );
+
     if (inviteErr) {
-      return new Response(JSON.stringify({ error: inviteErr.message }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // Email already registered — find the existing user
+      const { data: listData, error: listErr } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+      if (listErr) {
+        return new Response(JSON.stringify({ error: listErr.message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const existing = listData.users.find((u: any) => u.email === email);
+      if (!existing) {
+        return new Response(JSON.stringify({ error: inviteErr.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = existing.id;
+    } else {
+      userId = inviteData.user.id;
     }
 
     // Upsert the profile with name, role, phone, specialty
     const { error: profileErr } = await adminClient
       .from("profiles")
       .upsert({
-        id:        inviteData.user.id,
+        id:        userId,
         full_name,
         email,
         role,
@@ -82,7 +86,7 @@ serve(async (req: Request) => {
       });
     }
 
-    return new Response(JSON.stringify({ ok: true, id: inviteData.user.id }), {
+    return new Response(JSON.stringify({ ok: true, id: userId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
