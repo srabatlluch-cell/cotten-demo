@@ -15,12 +15,12 @@ export default function NuevaContrasena() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    // Supabase fires PASSWORD_RECOVERY when the recovery hash is in the URL
+    // PASSWORD_RECOVERY fires for recovery links; SIGNED_IN fires for invite links
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setReady(true);
+      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setReady(true);
     });
 
-    // Also check if session is already established (page refresh scenario)
+    // Also handle page refresh with an existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setReady(true);
     });
