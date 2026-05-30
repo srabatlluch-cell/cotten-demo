@@ -5,6 +5,8 @@
 -- return type so the admin UI can link back to the patient.
 -- ============================================================
 
+DROP FUNCTION IF EXISTS get_all_documents();
+
 CREATE OR REPLACE FUNCTION get_all_documents()
 RETURNS TABLE (
   id            UUID,
