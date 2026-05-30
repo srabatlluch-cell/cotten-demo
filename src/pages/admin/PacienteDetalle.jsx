@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download } from "lucide-react";
+import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download, CheckCircle, PenLine } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { getDocumentUrl, logAccess, formatFileSize, mimeToType } from "../../lib/storage";
+import { viewSignedPDF, downloadSignedPDF, printConsentForm } from "../../lib/pdfSigning";
 import { apptStatus, patientStatus, paymentStatus } from "../../lib/statusStyles";
 import {
   sendAppointmentConfirmation,
@@ -21,21 +22,23 @@ const APPT_STATUS_OPTIONS = [
 // ─── data fetching ─────────────────────────────────────────────────────────────
 
 async function loadDetail(patientId) {
-  const [detailRes, apptsRes, docsRes, paymentsRes] = await Promise.all([
-    supabase.rpc("get_patient_detail",       { p_patient_id: patientId }),
-    supabase.rpc("get_patient_appointments", { p_patient_id: patientId }),
-    supabase.rpc("get_patient_documents",    { p_patient_id: patientId }),
-    supabase.rpc("get_patient_payments",     { p_patient_id: patientId }),
+  const [detailRes, apptsRes, docsRes, paymentsRes, signedRes] = await Promise.all([
+    supabase.rpc("get_patient_detail",         { p_patient_id: patientId }),
+    supabase.rpc("get_patient_appointments",   { p_patient_id: patientId }),
+    supabase.rpc("get_patient_documents",      { p_patient_id: patientId }),
+    supabase.rpc("get_patient_payments",       { p_patient_id: patientId }),
+    supabase.rpc("get_patient_signed_forms",   { p_patient_id: patientId }),
   ]);
   if (detailRes.error)   throw detailRes.error;
   if (apptsRes.error)    throw apptsRes.error;
   if (docsRes.error)     throw docsRes.error;
   if (paymentsRes.error) throw paymentsRes.error;
   return {
-    patient:  Array.isArray(detailRes.data)   ? detailRes.data[0]   : null,
-    appts:    apptsRes.data   ?? [],
-    docs:     docsRes.data    ?? [],
-    payments: paymentsRes.data ?? [],
+    patient:      Array.isArray(detailRes.data) ? detailRes.data[0] : null,
+    appts:        apptsRes.data   ?? [],
+    docs:         docsRes.data    ?? [],
+    payments:     paymentsRes.data ?? [],
+    signedForms:  signedRes.data   ?? [],
   };
 }
 
@@ -51,6 +54,7 @@ export default function PacienteDetalle() {
   const [savingNotes,    setSavingNotes]    = useState(false);
   const [actionLoading,  setActionLoading]  = useState(null);
   const [statusChanging, setStatusChanging] = useState(null); // appointment id being updated
+  const [pdfWorking,     setPdfWorking]     = useState(null); // { id, action }
 
   useEffect(() => {
     let cancelled = false;
@@ -182,14 +186,47 @@ export default function PacienteDetalle() {
     );
   }
 
-  const { patient, appts, docs, payments } = data;
+  const { patient, appts, docs, payments, signedForms } = data;
   const initials = (patient.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const sc = patientStatus(patient.patient_status);
+
+  async function handleSignedForm(form, action) {
+    setPdfWorking({ id: form.id, action });
+    try {
+      let pdfUrl = null;
+      if (form.document_path) {
+        const { data: urlData, error: urlErr } = await supabase.storage
+          .from("consent-forms")
+          .createSignedUrl(form.document_path, 300);
+        if (urlErr) throw urlErr;
+        pdfUrl = urlData.signedUrl;
+      }
+      const patientName = patient.full_name ?? "";
+      const signedAt = form.signed_at ? new Date(form.signed_at) : null;
+      if (action === "view") {
+        if (pdfUrl) {
+          await viewSignedPDF(pdfUrl, form.signature_data, form, signedAt, patientName, () => {});
+        } else {
+          printConsentForm(form, signedAt, patientName);
+        }
+      } else {
+        if (pdfUrl) {
+          await downloadSignedPDF(pdfUrl, form.signature_data, form, signedAt, patientName, () => {});
+        } else {
+          printConsentForm(form, signedAt, patientName);
+        }
+      }
+    } catch (err) {
+      console.error("[PacienteDetalle] signed form error:", err);
+    } finally {
+      setPdfWorking(null);
+    }
+  }
 
   const tabs = [
     { id: "info",  label: "Información",         icon: User },
     { id: "citas", label: `Citas (${appts.length})`,    icon: Calendar },
-    { id: "docs",  label: `Documentos (${docs.length})`, icon: FileText },
+    { id: "docs",  label: `Documentos (${docs.length + signedForms.length})`, icon: FileText },
     { id: "pagos", label: `Pagos (${payments.length})`,  icon: CreditCard },
   ];
 
@@ -364,42 +401,102 @@ export default function PacienteDetalle() {
 
       {/* ── Docs tab ──────────────────────────────────────────────────────── */}
       {tab === "docs" && (
-        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
-          <div className="divide-y" style={{ borderColor: "#f3f0ea" }}>
-            {docs.length === 0 ? (
-              <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay documentos</p>
-            ) : docs.map(d => {
-              const type    = mimeToType(d.file_type);
-              const isPDF   = type === "PDF";
-              const isLoading = actionLoading === d.id;
-              return (
-                <div key={d.id} className="flex items-center gap-4 px-6 py-4">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: isPDF ? "#fff1e6" : "#e8f4fd" }}>
-                    <FileText size={14} style={{ color: isPDF ? "#f97316" : "#3b82f6" }} />
+        <div className="space-y-6">
+
+          {/* Regular files */}
+          <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="px-6 py-4 border-b flex items-center gap-2" style={{ borderColor: "#f3f0ea" }}>
+              <FileText size={14} style={{ color: "#c9a96e" }} />
+              <h3 className="text-xs uppercase tracking-wider font-semibold" style={{ color: "#c9a96e" }}>
+                Archivos ({docs.length})
+              </h3>
+            </div>
+            <div className="divide-y" style={{ borderColor: "#f3f0ea" }}>
+              {docs.length === 0 ? (
+                <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay archivos subidos</p>
+              ) : docs.map(d => {
+                const type      = mimeToType(d.file_type);
+                const isPDF     = type === "PDF";
+                const isLoading = actionLoading === d.id;
+                return (
+                  <div key={d.id} className="flex items-center gap-4 px-6 py-4">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: isPDF ? "#fff1e6" : "#e8f4fd" }}>
+                      <FileText size={14} style={{ color: isPDF ? "#f97316" : "#3b82f6" }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{d.name}</p>
+                      <p className="text-xs" style={{ color: "#9ca3af" }}>
+                        {[d.category, formatFileSize(d.file_size), new Date(d.created_at).toLocaleDateString("es-ES")].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openDoc(d, false)} disabled={isLoading}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        title="Ver">
+                        {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                      </button>
+                      <button onClick={() => openDoc(d, true)} disabled={isLoading}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        title="Descargar">
+                        <Download size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{d.name}</p>
-                    <p className="text-xs" style={{ color: "#9ca3af" }}>
-                      {[d.category, formatFileSize(d.file_size), new Date(d.created_at).toLocaleDateString("es-ES")].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openDoc(d, false)} disabled={isLoading}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                      title="Ver">
-                      {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
-                    </button>
-                    <button onClick={() => openDoc(d, true)} disabled={isLoading}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                      title="Descargar">
-                      <Download size={14} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+
+          {/* Signed consent forms */}
+          <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="px-6 py-4 border-b flex items-center gap-2" style={{ borderColor: "#f3f0ea" }}>
+              <PenLine size={14} style={{ color: "#10b981" }} />
+              <h3 className="text-xs uppercase tracking-wider font-semibold" style={{ color: "#10b981" }}>
+                Documentos firmados ({signedForms.length})
+              </h3>
+            </div>
+            <div className="divide-y" style={{ borderColor: "#f3f0ea" }}>
+              {signedForms.length === 0 ? (
+                <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay documentos firmados</p>
+              ) : signedForms.map(f => {
+                const isWorkingView = pdfWorking?.id === f.id && pdfWorking?.action === "view";
+                const isWorkingDown = pdfWorking?.id === f.id && pdfWorking?.action === "download";
+                const isWorking     = pdfWorking?.id === f.id;
+                return (
+                  <div key={f.id} className="flex items-center gap-4 px-6 py-4">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: "#d1fae5" }}>
+                      <CheckCircle size={14} style={{ color: "#10b981" }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{f.title}</p>
+                      <p className="text-xs" style={{ color: "#9ca3af" }}>
+                        Firmado el {f.signed_at ? new Date(f.signed_at).toLocaleDateString("es-ES") : "—"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleSignedForm(f, "view")}
+                        disabled={isWorking}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        title="Ver">
+                        {isWorkingView ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        onClick={() => handleSignedForm(f, "download")}
+                        disabled={isWorking}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        title="Descargar">
+                        {isWorkingDown ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
         </div>
       )}
 
