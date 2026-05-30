@@ -163,8 +163,10 @@ export default function Documentos() {
   const [uploading,     setUploading]     = useState(false);
   const [uploadPct,     setUploadPct]     = useState(0);
   const [uploadError,   setUploadError]   = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
   const [category,      setCategory]      = useState("Otros");
   const [targetPatient, setTargetPatient] = useState("");
+  const [pendingFiles,  setPendingFiles]  = useState([]); // awaiting confirmation
   const [actionLoading, setActionLoading] = useState(null);
   const [pdfWorking,    setPdfWorking]    = useState(null);
 
@@ -223,34 +225,53 @@ export default function Documentos() {
   }
   function finishProgress() { clearInterval(timerRef.current); setUploadPct(100); }
 
-  const handleFiles = useCallback(async (files) => {
+  // Stage files for confirmation — validate only, don't upload yet
+  const stageFiles = useCallback((files) => {
     setUploadError("");
+    setUploadSuccess("");
     if (!targetPatient) { setUploadError("Seleccione un paciente antes de subir el documento."); return; }
     for (const file of files) {
       const err = validateFile(file);
       if (err) { setUploadError(err); return; }
     }
+    setPendingFiles(Array.from(files));
+  }, [targetPatient]);
+
+  const cancelUpload = () => {
+    setPendingFiles([]);
+    setUploadError("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // Confirmed — actually upload
+  const confirmUpload = useCallback(async () => {
+    if (!pendingFiles.length) return;
     setUploading(true);
+    setUploadError("");
     startProgress();
     try {
-      const inserted = [];
-      for (const file of files) {
-        const row = await staffUploadDocument(file, targetPatient, category);
-        const pt  = patients.find(p => p.patient_id === targetPatient);
-        inserted.push({ ...row, patient_name: pt?.full_name ?? pt?.email ?? "—", patient_email: pt?.email ?? "" });
+      for (const file of pendingFiles) {
+        await staffUploadDocument(file, targetPatient, category);
       }
       finishProgress();
       await new Promise(r => setTimeout(r, 400));
-      setDocs(prev => [...inserted, ...prev]);
+      // Refetch to get accurate list + count
+      const fresh = await fetchAllDocuments().catch(() => null);
+      if (fresh) setDocs(fresh);
+      const pt = patients.find(p => p.patient_id === targetPatient);
+      setUploadSuccess(
+        `${pendingFiles.length === 1 ? `"${pendingFiles[0].name}"` : `${pendingFiles.length} archivos`} subido${pendingFiles.length !== 1 ? "s" : ""} correctamente para ${pt?.full_name ?? "el paciente"}.`
+      );
+      setPendingFiles([]);
+      if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
       setUploadError(err.message ?? "Error al subir el archivo.");
       finishProgress();
     } finally {
       setUploading(false);
       setUploadPct(0);
-      if (fileRef.current) fileRef.current.value = "";
     }
-  }, [targetPatient, patients, category]);
+  }, [pendingFiles, targetPatient, category, patients]);
 
   // ── Open regular doc ────────────────────────────────────────────────────────
   async function openDoc(doc, download = false) {
@@ -501,46 +522,91 @@ export default function Documentos() {
             </select>
           </div>
 
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles([...e.dataTransfer.files]); }}
-            onClick={() => !uploading && fileRef.current.click()}
-            className="rounded-2xl p-8 text-center transition-all duration-200"
-            style={{
-              border:     `2px dashed ${dragOver ? "#c9a96e" : "#d1cbbf"}`,
-              background: dragOver ? "#c9a96e08" : "#faf9f7",
-              cursor:     uploading ? "default" : "pointer",
-            }}
-          >
-            <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden" onChange={e => handleFiles([...e.target.files])} />
-
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
-              style={{ background: "linear-gradient(135deg, #c9a96e18, #c9a96e25)" }}>
-              {uploading
-                ? <Loader2 size={20} style={{ color: "#c9a96e" }} className="animate-spin" />
-                : <CloudUpload size={20} style={{ color: "#c9a96e" }} />}
+          {/* Dropzone — hidden while confirming or uploading */}
+          {!pendingFiles.length && !uploading && (
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); stageFiles(e.dataTransfer.files); }}
+              onClick={() => fileRef.current.click()}
+              className="rounded-2xl p-8 text-center transition-all duration-200"
+              style={{
+                border:     `2px dashed ${dragOver ? "#c9a96e" : "#d1cbbf"}`,
+                background: dragOver ? "#c9a96e08" : "#faf9f7",
+                cursor:     "pointer",
+              }}
+            >
+              <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png"
+                className="hidden" onChange={e => stageFiles(e.target.files)} />
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                style={{ background: "linear-gradient(135deg, #c9a96e18, #c9a96e25)" }}>
+                <CloudUpload size={20} style={{ color: "#c9a96e" }} />
+              </div>
+              <p className="font-medium text-sm mb-1" style={{ color: "#1a2744" }}>
+                {dragOver ? "Suelte aquí para subir" : "Arrastre archivos o haga clic"}
+              </p>
+              <p className="text-xs" style={{ color: "#9ca3af" }}>PDF, JPG, PNG hasta 50 MB</p>
             </div>
+          )}
 
-            {uploading ? (
-              <>
-                <p className="font-medium text-sm mb-3" style={{ color: "#1a2744" }}>Subiendo archivo…</p>
-                <div className="w-full max-w-xs mx-auto rounded-full overflow-hidden" style={{ height: 5, background: "#e5e0d8" }}>
-                  <div className="h-full rounded-full transition-all duration-200"
-                    style={{ width: `${uploadPct}%`, background: "linear-gradient(90deg, #c9a96e, #d9bc8a)" }} />
-                </div>
-                <p className="text-xs mt-2" style={{ color: "#9ca3af" }}>{uploadPct}%</p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium text-sm mb-1" style={{ color: "#1a2744" }}>
-                  {dragOver ? "Suelte aquí para subir" : "Arrastre archivos o haga clic"}
-                </p>
-                <p className="text-xs" style={{ color: "#9ca3af" }}>PDF, JPG, PNG hasta 50 MB</p>
-              </>
-            )}
-          </div>
+          {/* Upload progress */}
+          {uploading && (
+            <div className="rounded-2xl p-8 text-center" style={{ background: "#faf9f7", border: "2px dashed #d1cbbf" }}>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                style={{ background: "linear-gradient(135deg, #c9a96e18, #c9a96e25)" }}>
+                <Loader2 size={20} style={{ color: "#c9a96e" }} className="animate-spin" />
+              </div>
+              <p className="font-medium text-sm mb-3" style={{ color: "#1a2744" }}>Subiendo archivo…</p>
+              <div className="w-full max-w-xs mx-auto rounded-full overflow-hidden" style={{ height: 5, background: "#e5e0d8" }}>
+                <div className="h-full rounded-full transition-all duration-200"
+                  style={{ width: `${uploadPct}%`, background: "linear-gradient(90deg, #c9a96e, #d9bc8a)" }} />
+              </div>
+              <p className="text-xs mt-2" style={{ color: "#9ca3af" }}>{uploadPct}%</p>
+            </div>
+          )}
+
+          {/* Confirmation panel */}
+          {pendingFiles.length > 0 && !uploading && (
+            <div className="rounded-2xl p-5" style={{ background: "#faf9f7", border: "1px solid #e5e0d8" }}>
+              <p className="text-sm font-semibold mb-3" style={{ color: "#1a2744" }}>Confirmar subida</p>
+              <div className="space-y-2 mb-4">
+                {pendingFiles.map((f, i) => (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white" style={{ border: "1px solid #e5e0d8" }}>
+                    <FileText size={14} style={{ color: "#f97316", flexShrink: 0 }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{f.name}</p>
+                      <p className="text-xs" style={{ color: "#9ca3af" }}>
+                        {patients.find(p => p.patient_id === targetPatient)?.full_name ?? "Paciente"} · {category} · {(f.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmUpload}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                  style={{ background: "linear-gradient(135deg, #1a2744, #243256)", color: "white" }}
+                >
+                  Confirmar y subir
+                </button>
+                <button
+                  onClick={cancelUpload}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={{ background: "white", border: "1px solid #e5e0d8", color: "#6b7280" }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {uploadSuccess && !uploading && (
+            <div className="mt-3 flex items-center gap-2 text-sm px-4 py-3 rounded-xl" style={{ background: "#f0fdf4", color: "#15803d" }}>
+              <CheckCircle size={15} className="flex-shrink-0" />
+              {uploadSuccess}
+            </div>
+          )}
 
           {uploadError && (
             <div className="mt-3 flex items-center gap-2 text-sm px-4 py-3 rounded-xl" style={{ background: "#fef2f2", color: "#dc2626" }}>
