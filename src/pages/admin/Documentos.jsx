@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   FileText, Image, Download, Eye, Search, CloudUpload,
-  Loader2, AlertCircle, CheckCircle, PenLine, FolderOpen,
+  Loader2, AlertCircle, CheckCircle, PenLine, FolderOpen, ExternalLink,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
@@ -43,7 +44,8 @@ function DocRow({ doc, actionLoading, onOpen }) {
 
   return (
     <div className="grid items-center px-6 py-3.5 hover:bg-gray-50 transition-colors"
-      style={{ gridTemplateColumns: "2fr 1.4fr 1.1fr 80px 72px 80px 72px" }}>
+      style={{ gridTemplateColumns: "2.2fr 1.5fr 1fr 72px 64px 80px 72px" }}>
+      {/* File name */}
       <div className="flex items-center gap-3 min-w-0">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ background: isPDF ? "#fff1e6" : "#e8f4fd" }}>
@@ -53,16 +55,33 @@ function DocRow({ doc, actionLoading, onOpen }) {
         </div>
         <p className="text-sm truncate font-medium" style={{ color: "#1a2744" }}>{doc.name}</p>
       </div>
-      <p className="text-sm truncate" style={{ color: "#374151" }}>{doc.patient_name ?? "—"}</p>
+      {/* Patient — links to patient detail */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        {doc.patient_id ? (
+          <Link to={`/admin/pacientes/${doc.patient_id}`}
+            className="text-sm truncate hover:underline flex items-center gap-1"
+            style={{ color: "#1a2744" }}>
+            {doc.patient_name ?? "—"}
+            <ExternalLink size={11} style={{ color: "#c9a96e", flexShrink: 0 }} />
+          </Link>
+        ) : (
+          <p className="text_sm truncate" style={{ color: "#374151" }}>{doc.patient_name ?? "—"}</p>
+        )}
+      </div>
+      {/* Category */}
       <p className="text-xs truncate" style={{ color: "#9ca3af" }}>{doc.category || "—"}</p>
+      {/* Type badge */}
       <span className="text-xs px-2 py-0.5 rounded-full w-fit"
         style={{ background: isPDF ? "#fff1e6" : "#e8f4fd", color: isPDF ? "#f97316" : "#3b82f6" }}>
         {type}
       </span>
+      {/* Size */}
       <p className="text-xs" style={{ color: "#9ca3af" }}>{formatFileSize(doc.file_size)}</p>
+      {/* Date */}
       <p className="text-xs" style={{ color: "#9ca3af" }}>
         {new Date(doc.created_at).toLocaleDateString("es-ES")}
       </p>
+      {/* Actions */}
       <div className="flex items-center gap-1 justify-end">
         <button onClick={() => onOpen(doc, false)} disabled={isLoading}
           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
@@ -97,7 +116,16 @@ function SignedFormRow({ form, pdfWorking, onAction }) {
           )}
         </div>
       </div>
-      <p className="text-sm truncate" style={{ color: "#374151" }}>{form.patient_name ?? "—"}</p>
+      {form.patient_id ? (
+        <Link to={`/admin/pacientes/${form.patient_id}`}
+          className="text-sm truncate hover:underline flex items-center gap-1"
+          style={{ color: "#1a2744" }}>
+          {form.patient_name ?? "—"}
+          <ExternalLink size={11} style={{ color: "#c9a96e", flexShrink: 0 }} />
+        </Link>
+      ) : (
+        <p className="text-sm truncate" style={{ color: "#374151" }}>{form.patient_name ?? "—"}</p>
+      )}
       <p className="text-xs" style={{ color: "#9ca3af" }}>
         {form.signed_at
           ? new Date(form.signed_at).toLocaleString("es-ES", {
@@ -405,7 +433,7 @@ export default function Documentos() {
           {/* Table header */}
           <div className="grid px-6 py-2.5 border-b text-xs uppercase tracking-wider"
             style={{
-              gridTemplateColumns: "2fr 1.4fr 1.1fr 80px 72px 80px 72px",
+              gridTemplateColumns: "2.2fr 1.5fr 1fr 72px 64px 80px 72px",
               borderColor: "#f3f0ea", background: "#faf9f7", color: "#9ca3af",
             }}>
             <span>Documento</span>
