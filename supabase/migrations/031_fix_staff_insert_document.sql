@@ -4,6 +4,8 @@
 -- the 'receptionist' role is included alongside admin/doctor/staff.
 -- ============================================================
 
+DROP FUNCTION IF EXISTS staff_insert_document(uuid,text,text,text,bigint,text);
+
 CREATE OR REPLACE FUNCTION staff_insert_document(
   p_patient_id UUID,
   p_file_path  TEXT,
@@ -31,9 +33,9 @@ BEGIN
   END IF;
 
   RETURN QUERY
-  INSERT INTO documents (patient_id, file_path, name, category, file_size, file_type)
+  INSERT INTO documents AS d (patient_id, file_path, name, category, file_size, file_type)
   VALUES (p_patient_id, p_file_path, p_name, p_category, p_file_size, p_file_type)
   RETURNING
-    id, name, category, file_path, file_size, file_type, patient_id, created_at;
+    d.id, d.name, d.category, d.file_path, d.file_size, d.file_type, d.patient_id, d.created_at;
 END;
 $$;
