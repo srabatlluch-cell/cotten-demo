@@ -69,84 +69,106 @@ export function printConsentForm(form, sigDataUrl, timestamp, patientName = "", 
   setTimeout(() => win.print(), 400);
 }
 
+// Builds the signed PDF and returns a blob URL. Caller is responsible for revoking it.
+async function buildSignedPdfBlobUrl(pdfUrl, sigDataUrl, form, signedAtDate, patientName) {
+  const res = await fetch(pdfUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const pdfBytes = await res.arrayBuffer();
+
+  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+
+  const sigBase64 = sigDataUrl.replace(/^data:image\/png;base64,/, "");
+  const sigBytes  = Uint8Array.from(atob(sigBase64), c => c.charCodeAt(0));
+  const sigImage  = await pdfDoc.embedPng(sigBytes);
+
+  const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const d  = signedAtDate;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  const dateStr = `${dd}/${mm}/${d.getFullYear()}  ${hh}:${mi}`;
+  const nameStr = patientName.length > 24 ? patientName.slice(0, 22) + "..." : patientName;
+
+  const sigW = 115;
+  const sigH = Math.round(sigW * (160 / 700));
+  const boxH = sigH + 40;
+
+  for (const page of pdfDoc.getPages()) {
+    const { width } = page.getSize();
+    const boxX = width - sigW - 14;
+    const boxY = 8;
+
+    page.drawRectangle({
+      x: boxX - 5, y: boxY - 5, width: sigW + 10, height: boxH + 10,
+      color: rgb(1, 1, 1), borderColor: rgb(0.788, 0.663, 0.431),
+      borderWidth: 0.6, opacity: 0.88,
+    });
+    page.drawText("Clinica Cotten | eIDAS UE 910/2014", {
+      x: boxX, y: boxY + 2, size: 4.5, font: fontBold,
+      color: rgb(0.788, 0.663, 0.431),
+    });
+    page.drawText(dateStr, {
+      x: boxX, y: boxY + 9, size: 5, font,
+      color: rgb(0.102, 0.153, 0.267),
+    });
+    page.drawLine({
+      start: { x: boxX, y: boxY + 16 }, end: { x: boxX + sigW, y: boxY + 16 },
+      thickness: 0.3, color: rgb(0.788, 0.663, 0.431),
+    });
+    page.drawImage(sigImage, { x: boxX, y: boxY + 18, width: sigW, height: sigH });
+    page.drawLine({
+      start: { x: boxX, y: boxY + sigH + 20 }, end: { x: boxX + sigW, y: boxY + sigH + 20 },
+      thickness: 0.3, color: rgb(0.9, 0.88, 0.86),
+    });
+    if (nameStr) {
+      page.drawText(nameStr, {
+        x: boxX, y: boxY + sigH + 24, size: 5.5, font: fontBold,
+        color: rgb(0.102, 0.153, 0.267),
+      });
+    }
+    page.drawText("Firmante:", {
+      x: boxX, y: boxY + sigH + 32, size: 4.5, font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+  }
+
+  const outBytes = await pdfDoc.save();
+  return URL.createObjectURL(new Blob([outBytes], { type: "application/pdf" }));
+}
+
+export async function viewSignedPDF(pdfUrl, sigDataUrl, form, signedAtDate, patientName, setWorking) {
+  setWorking(true);
+  try {
+    const blobUrl = await buildSignedPdfBlobUrl(pdfUrl, sigDataUrl, form, signedAtDate, patientName);
+    window.open(blobUrl, "_blank", "noopener,noreferrer");
+    // Revoke after a delay to allow the browser to load it
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (err) {
+    console.error("[viewSignedPDF] error:", err);
+    const timestamp = signedAtDate.toLocaleString("es-ES", {
+      day: "2-digit", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+    printConsentForm(form, sigDataUrl, timestamp, patientName, pdfUrl);
+  } finally {
+    setWorking(false);
+  }
+}
+
 export async function downloadSignedPDF(pdfUrl, sigDataUrl, form, signedAtDate, patientName, setWorking) {
   setWorking(true);
   try {
-    const res = await fetch(pdfUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const pdfBytes = await res.arrayBuffer();
-
-    const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-
-    const sigBase64 = sigDataUrl.replace(/^data:image\/png;base64,/, "");
-    const sigBytes  = Uint8Array.from(atob(sigBase64), c => c.charCodeAt(0));
-    const sigImage  = await pdfDoc.embedPng(sigBytes);
-
-    const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-    const d  = signedAtDate;
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mi = String(d.getMinutes()).padStart(2, "0");
-    const dateStr  = `${dd}/${mm}/${d.getFullYear()}  ${hh}:${mi}`;
-    const nameStr  = patientName.length > 24 ? patientName.slice(0, 22) + "..." : patientName;
-
-    const sigW = 115;
-    const sigH = Math.round(sigW * (160 / 700));
-    const boxH = sigH + 40;
-
-    for (const page of pdfDoc.getPages()) {
-      const { width } = page.getSize();
-      const boxX = width - sigW - 14;
-      const boxY = 8;
-
-      page.drawRectangle({
-        x: boxX - 5, y: boxY - 5, width: sigW + 10, height: boxH + 10,
-        color: rgb(1, 1, 1), borderColor: rgb(0.788, 0.663, 0.431),
-        borderWidth: 0.6, opacity: 0.88,
-      });
-
-      page.drawText("Clinica Cotten | eIDAS UE 910/2014", {
-        x: boxX, y: boxY + 2, size: 4.5, font: fontBold,
-        color: rgb(0.788, 0.663, 0.431),
-      });
-      page.drawText(dateStr, {
-        x: boxX, y: boxY + 9, size: 5, font,
-        color: rgb(0.102, 0.153, 0.267),
-      });
-      page.drawLine({
-        start: { x: boxX, y: boxY + 16 }, end: { x: boxX + sigW, y: boxY + 16 },
-        thickness: 0.3, color: rgb(0.788, 0.663, 0.431),
-      });
-      page.drawImage(sigImage, { x: boxX, y: boxY + 18, width: sigW, height: sigH });
-      page.drawLine({
-        start: { x: boxX, y: boxY + sigH + 20 }, end: { x: boxX + sigW, y: boxY + sigH + 20 },
-        thickness: 0.3, color: rgb(0.9, 0.88, 0.86),
-      });
-      if (nameStr) {
-        page.drawText(nameStr, {
-          x: boxX, y: boxY + sigH + 24, size: 5.5, font: fontBold,
-          color: rgb(0.102, 0.153, 0.267),
-        });
-      }
-      page.drawText("Firmante:", {
-        x: boxX, y: boxY + sigH + 32, size: 4.5, font,
-        color: rgb(0.5, 0.5, 0.5),
-      });
-    }
-
-    const outBytes = await pdfDoc.save();
-    const blob     = new Blob([outBytes], { type: "application/pdf" });
-    const url      = URL.createObjectURL(blob);
-    const a        = document.createElement("a");
-    a.href         = url;
-    a.download     = `${form.title.replace(/[^\w\s\-]/g, "").trim()}_firmado.pdf`;
+    const blobUrl = await buildSignedPdfBlobUrl(pdfUrl, sigDataUrl, form, signedAtDate, patientName);
+    const a       = document.createElement("a");
+    a.href        = blobUrl;
+    a.download    = `${form.title.replace(/[^\w\s\-]/g, "").trim()}_firmado.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
   } catch (err) {
     console.error("[downloadSignedPDF] error:", err);
     const timestamp = signedAtDate.toLocaleString("es-ES", {

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { FileText, Image, Download, Eye, CloudUpload, Loader2, AlertCircle, CheckCircle, PenLine } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
-import { downloadSignedPDF, printConsentForm } from "../../lib/pdfSigning";
+import { viewSignedPDF, downloadSignedPDF, printConsentForm } from "../../lib/pdfSigning";
 import {
   validateFile,
   uploadDocument,
@@ -48,7 +48,7 @@ export default function MisDocumentos() {
   const [uploadError,    setUploadError]    = useState("");
   const [category,       setCategory]       = useState("Otros");
   const [actionLoading,  setActionLoading]  = useState(null);
-  const [pdfDownloading, setPdfDownloading] = useState(null); // signed form id being downloaded
+  const [pdfWorking, setPdfWorking] = useState(null); // { id, action: 'view'|'download' }
   const [patientName,    setPatientName]    = useState("");
 
   const fileRef  = useRef();
@@ -153,40 +153,24 @@ export default function MisDocumentos() {
     }
   }
 
-  async function openSignedForm(form) {
-    if (!form.document_path) return;
-    try {
-      const { data, error } = await supabase.storage
-        .from("consent-forms")
-        .createSignedUrl(form.document_path, 3600);
-      if (error) throw error;
-      if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      console.error("[MisDocumentos] open signed form error:", err);
-    }
-  }
-
-  async function downloadSignedForm(form) {
+  async function handleSignedForm(form, action) {
     if (!form.signature_data) return;
     const signedAtDate = form.signed_at ? new Date(form.signed_at) : new Date();
+    const setWorking   = (val) => setPdfWorking(val ? { id: form.id, action } : null);
+    const fn           = action === "view" ? viewSignedPDF : downloadSignedPDF;
 
     if (form.document_path) {
-      // Get signed URL for the PDF, then embed signature overlay
       try {
         const { data, error } = await supabase.storage
           .from("consent-forms")
           .createSignedUrl(form.document_path, 3600);
         if (error) throw error;
         if (data?.signedUrl) {
-          await downloadSignedPDF(
-            data.signedUrl, form.signature_data, form,
-            signedAtDate, patientName,
-            (val) => setPdfDownloading(val ? form.id : null)
-          );
+          await fn(data.signedUrl, form.signature_data, form, signedAtDate, patientName, setWorking);
           return;
         }
       } catch (err) {
-        console.error("[MisDocumentos] get signed url error:", err);
+        console.error("[MisDocumentos] signed url error:", err);
       }
     }
 
@@ -285,43 +269,48 @@ export default function MisDocumentos() {
               No tiene documentos firmados todavía.
             </div>
           ) : (
-            signedForms.map(form => {
-              const isDownloading = pdfDownloading === form.id;
-              return (
-                <div key={form.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: "#dcfce7" }}>
-                    <CheckCircle size={16} style={{ color: "#15803d" }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{form.title}</p>
-                    <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>
-                      Firmado el {form.signed_at
-                        ? new Date(form.signed_at).toLocaleString("es-ES", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
-                        : "—"}
-                    </p>
-                  </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full flex-shrink-0 font-medium"
-                    style={{ background: "#dcfce7", color: "#15803d" }}>
-                    Firmado
-                  </span>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {form.document_path && (
-                      <button onClick={() => openSignedForm(form)}
-                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
-                        title="Ver documento">
-                        <Eye size={15} />
-                      </button>
-                    )}
-                    <button onClick={() => downloadSignedForm(form)} disabled={isDownloading}
-                      className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                      title="Descargar PDF firmado">
-                      {isDownloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-                    </button>
-                  </div>
+            signedForms.map(form => (
+              <div key={form.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: "#dcfce7" }}>
+                  <CheckCircle size={16} style={{ color: "#15803d" }} />
                 </div>
-              );
-            })
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: "#1a2744" }}>{form.title}</p>
+                  <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>
+                    Firmado el {form.signed_at
+                      ? new Date(form.signed_at).toLocaleString("es-ES", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                      : "—"}
+                  </p>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-full flex-shrink-0 font-medium"
+                  style={{ background: "#dcfce7", color: "#15803d" }}>
+                  Firmado
+                </span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleSignedForm(form, "view")}
+                    disabled={!!pdfWorking && pdfWorking.id === form.id}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    title="Ver documento firmado"
+                  >
+                    {pdfWorking?.id === form.id && pdfWorking.action === "view"
+                      ? <Loader2 size={15} className="animate-spin" />
+                      : <Eye size={15} />}
+                  </button>
+                  <button
+                    onClick={() => handleSignedForm(form, "download")}
+                    disabled={!!pdfWorking && pdfWorking.id === form.id}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    title="Descargar PDF firmado"
+                  >
+                    {pdfWorking?.id === form.id && pdfWorking.action === "download"
+                      ? <Loader2 size={15} className="animate-spin" />
+                      : <Download size={15} />}
+                  </button>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
