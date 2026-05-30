@@ -58,9 +58,12 @@ serve(async (req: Request) => {
     // Confirm email first so generateLink works even for unactivated users
     await adminClient.auth.admin.updateUserById(userId, { email_confirm: true });
 
+    const portalUrl = Deno.env.get("PORTAL_URL") ?? "https://cotten-demo.vercel.app";
+
     let { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
       type: "recovery",
       email: normalizedEmail,
+      options: { redirectTo: `${portalUrl}/nueva-contrasena` },
     });
 
     // If generateLink fails (SQL-created user with broken identity),
@@ -103,6 +106,7 @@ serve(async (req: Request) => {
       const retry = await adminClient.auth.admin.generateLink({
         type: "recovery",
         email: normalizedEmail,
+        options: { redirectTo: `${portalUrl}/nueva-contrasena` },
       });
       linkData = retry.data;
       linkErr  = retry.error;

@@ -37,6 +37,11 @@ serve(async (req: Request) => {
     const { data: { user: caller }, error: authErr } = await anonClient.auth.getUser();
     if (authErr || !caller) return respond({ error: "Unauthorized" }, 401);
 
+    // Verify caller is staff
+    const { data: callerProfile } = await adminClient.from("profiles").select("role").eq("id", caller.id).single();
+    const staffRoles = ["admin", "doctor", "staff", "receptionist"];
+    if (!callerProfile || !staffRoles.includes(callerProfile.role)) return respond({ error: "Forbidden" }, 403);
+
     const { email, full_name, role, phone, specialty } = await req.json();
     if (!email || !full_name || !role) {
       return respond({ error: "email, full_name y role son obligatorios" }, 400);
@@ -66,6 +71,7 @@ serve(async (req: Request) => {
 
       const { data: linkData } = await adminClient.auth.admin.generateLink({
         type: "recovery", email: normalizedEmail,
+        options: { redirectTo: `${PORTAL_URL}/nueva-contrasena` },
       });
 
       if (linkData?.properties?.action_link) {
@@ -116,6 +122,7 @@ serve(async (req: Request) => {
     // ── Step 5: Generate set-password link and send email ─────────────────
     const { data: newLinkData, error: newLinkErr } = await adminClient.auth.admin.generateLink({
       type: "recovery", email: normalizedEmail,
+      options: { redirectTo: `${PORTAL_URL}/nueva-contrasena` },
     });
     if (newLinkErr || !newLinkData?.properties?.action_link) {
       return respond({ error: "No se pudo generar el enlace de acceso." }, 500);

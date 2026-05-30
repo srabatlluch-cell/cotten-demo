@@ -31,6 +31,11 @@ serve(async (req: Request) => {
     const { data: { user }, error: authErr } = await anonClient.auth.getUser();
     if (authErr || !user) return json({ error: "Unauthorized" }, 401);
 
+    // Verify caller is staff
+    const { data: callerProfile } = await adminClient.from("profiles").select("role").eq("id", user.id).single();
+    const staffRoles = ["admin", "doctor", "staff", "receptionist"];
+    if (!callerProfile || !staffRoles.includes(callerProfile.role)) return json({ error: "Forbidden" }, 403);
+
     const { user_id } = await req.json();
     if (!user_id) return json({ error: "user_id es obligatorio" }, 400);
 
