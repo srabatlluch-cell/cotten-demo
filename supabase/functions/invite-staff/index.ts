@@ -190,5 +190,5 @@ async function sendEmail(
     return respond({ error: `Error enviando email: ${resendBody?.message ?? resendRes.status}` }, 500);
   }
 
-  return respond({ ok: true, id: userId });
+  return respond({ ok: true });
 }
