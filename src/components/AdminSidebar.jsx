@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, FileText, CreditCard, PenLine, UserCog, LogOut, Menu, X } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 const navItems = [
   { to: "/admin/panel", icon: LayoutDashboard, label: "Panel" },
@@ -12,9 +13,25 @@ const navItems = [
   { to: "/admin/equipo", icon: UserCog, label: "Equipo" },
 ];
 
+const roleLabels = {
+  admin: "Admin",
+  doctor: "Doctor",
+  staff: "Staff",
+  receptionist: "Recepción",
+};
+
 export default function AdminSidebar() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { profile } = useAuth();
+
+  const displayName = profile?.full_name || profile?.email || "Usuario";
+  const displayRole = roleLabels[profile?.role] ?? profile?.role ?? "";
+  const initials = displayName
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
 
   const SidebarContent = () => (
     <>
@@ -31,11 +48,11 @@ export default function AdminSidebar() {
       </div>
 
       <div className="p-4 mx-4 mt-4 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center mb-2" style={{ background: "linear-gradient(135deg, #c9a96e22, #c9a96e44)" }}>
-          <UserCog size={14} style={{ color: "#c9a96e" }} />
+        <div className="w-8 h-8 rounded-full flex items-center justify-center mb-2 text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)" }}>
+          {initials || <UserCog size={14} />}
         </div>
-        <p className="text-white text-sm font-medium">Sofía Navarro</p>
-        <p className="text-white/40 text-xs">Recepción · Admin</p>
+        <p className="text-white text-sm font-medium truncate">{displayName}</p>
+        {displayRole && <p className="text-white/40 text-xs">{displayRole}</p>}
       </div>
 
       <nav className="flex-1 py-4 px-3 overflow-y-auto">
