@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download, CheckCircle, PenLine, Trash2, StickyNote, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download, CheckCircle, PenLine, Trash2, StickyNote, ChevronDown, ChevronUp, Save, Plus, Pencil, X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { getDocumentUrl, logAccess, formatFileSize, mimeToType, deleteDocument } from "../../lib/storage";
 import { viewSignedPDF, downloadSignedPDF, printConsentForm } from "../../lib/pdfSigning";
@@ -60,6 +60,12 @@ export default function PacienteDetalle() {
   const [expandedNotes,  setExpandedNotes]  = useState({}); // { [apptId]: boolean }
   const [editingNotes,   setEditingNotes]   = useState({}); // { [apptId]: string }
   const [savingNoteId,   setSavingNoteId]   = useState(null);
+  const [payModal,       setPayModal]       = useState(null); // null | { mode: 'create'|'edit', payment? }
+  const [payForm,        setPayForm]        = useState({});
+  const [payError,       setPayError]       = useState("");
+  const [savingPay,      setSavingPay]      = useState(false);
+  const [deletePayTarget,setDeletePayTarget]= useState(null);
+  const [deletingPay,    setDeletingPay]    = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,6 +216,89 @@ export default function PacienteDetalle() {
       console.error("[PacienteDetalle] save notes error:", err);
     } finally {
       setSavingNoteId(null);
+    }
+  }
+
+  function openCreatePayment() {
+    setPayForm({ concept: "", amount: "", due_date: "", status: "pending" });
+    setPayError("");
+    setPayModal({ mode: "create" });
+  }
+
+  function openEditPayment(payment) {
+    setPayForm({
+      concept:  payment.concept ?? "",
+      amount:   String(payment.amount ?? ""),
+      due_date: payment.due_date ?? "",
+      status:   payment.pay_status ?? "pending",
+    });
+    setPayError("");
+    setPayModal({ mode: "edit", payment });
+  }
+
+  async function handleSavePayment(e) {
+    e.preventDefault();
+    if (!payForm.concept.trim()) { setPayError("Indica el concepto."); return; }
+    if (!payForm.amount || isNaN(Number(payForm.amount))) { setPayError("Indica un importe válido."); return; }
+    setSavingPay(true);
+    setPayError("");
+    try {
+      if (payModal.mode === "create") {
+        const { data, error } = await supabase.rpc("admin_create_payment", {
+          p_patient_id: id,
+          p_concept:    payForm.concept.trim(),
+          p_amount:     Number(payForm.amount),
+          p_due_date:   payForm.due_date || null,
+        });
+        if (error) throw error;
+        const newPay = {
+          id:         data,
+          concept:    payForm.concept.trim(),
+          amount:     Number(payForm.amount),
+          pay_status: "pending",
+          due_date:   payForm.due_date || null,
+          paid_at:    null,
+          created_at: new Date().toISOString(),
+        };
+        setData(prev => ({ ...prev, payments: [newPay, ...prev.payments] }));
+      } else {
+        const { error } = await supabase.rpc("admin_update_payment", {
+          p_payment_id: payModal.payment.id,
+          p_concept:    payForm.concept.trim(),
+          p_amount:     Number(payForm.amount),
+          p_due_date:   payForm.due_date || null,
+          p_status:     payForm.status,
+        });
+        if (error) throw error;
+        setData(prev => ({
+          ...prev,
+          payments: prev.payments.map(p =>
+            p.id === payModal.payment.id
+              ? { ...p, concept: payForm.concept.trim(), amount: Number(payForm.amount), due_date: payForm.due_date || null, pay_status: payForm.status, paid_at: payForm.status === "paid" ? (p.paid_at ?? new Date().toISOString()) : null }
+              : p
+          ),
+        }));
+      }
+      setPayModal(null);
+    } catch (err) {
+      setPayError(err.message ?? "Error al guardar el pago.");
+    } finally {
+      setSavingPay(false);
+    }
+  }
+
+  async function confirmDeletePayment() {
+    if (!deletePayTarget) return;
+    setDeletingPay(true);
+    try {
+      const { error } = await supabase.rpc("admin_delete_payment", { p_payment_id: deletePayTarget.id });
+      if (error) throw error;
+      setData(prev => ({ ...prev, payments: prev.payments.filter(p => p.id !== deletePayTarget.id) }));
+      setDeletePayTarget(null);
+    } catch (err) {
+      console.error("[PacienteDetalle] delete payment error:", err);
+    } finally {
+      setDeletingPay(false);
     }
   }
 
@@ -612,29 +701,88 @@ export default function PacienteDetalle() {
 
       {/* ── Pagos tab ─────────────────────────────────────────────────────── */}
       {tab === "pagos" && (
-        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
-          <div className="divide-y" style={{ borderColor: "#f3f0ea" }}>
-            {payments.length === 0 ? (
-              <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay pagos registrados</p>
-            ) : payments.map(p => {
-              const ps = paymentStatus(p.pay_status);
-              return (
-                <div key={p.id} className="flex items-center gap-4 px-6 py-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium" style={{ color: "#1a2744" }}>{p.concept}</p>
-                    <p className="text-xs" style={{ color: "#9ca3af" }}>
-                      {p.due_date ? new Date(p.due_date + "T12:00").toLocaleDateString("es-ES") : new Date(p.created_at).toLocaleDateString("es-ES")}
-                    </p>
+        <div className="space-y-4">
+          {/* Header with total + new button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {payments.length > 0 && (() => {
+                const pending = payments.filter(p => p.pay_status !== "paid").reduce((s, p) => s + Number(p.amount), 0);
+                const paid    = payments.filter(p => p.pay_status === "paid").reduce((s, p) => s + Number(p.amount), 0);
+                return (
+                  <div className="flex gap-3">
+                    {pending > 0 && (
+                      <span className="text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: "#fef3c7", color: "#92400e" }}>
+                        Pendiente: {pending.toLocaleString("es-ES")} €
+                      </span>
+                    )}
+                    {paid > 0 && (
+                      <span className="text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: "#d1fae5", color: "#065f46" }}>
+                        Cobrado: {paid.toLocaleString("es-ES")} €
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm font-semibold" style={{ color: "#1a2744" }}>
-                    {Number(p.amount).toLocaleString("es-ES")} €
-                  </p>
-                  <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold" style={ps.badge}>
-                    {ps.icon} {ps.label}
-                  </span>
+                );
+              })()}
+            </div>
+            <button
+              onClick={openCreatePayment}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+              style={{ background: "linear-gradient(135deg, #c9a96e, #d9bc8a)", color: "white" }}
+            >
+              <Plus size={13} /> Nuevo pago
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="divide-y" style={{ borderColor: "#f3f0ea" }}>
+              {payments.length === 0 ? (
+                <div className="px-6 py-10 text-center">
+                  <CreditCard size={28} className="mx-auto mb-2" style={{ color: "#e5e0d8" }} />
+                  <p className="text-sm" style={{ color: "#9ca3af" }}>No hay pagos registrados</p>
+                  <button onClick={openCreatePayment} className="mt-3 text-xs font-medium hover:underline" style={{ color: "#c9a96e" }}>
+                    Añadir el primero
+                  </button>
                 </div>
-              );
-            })}
+              ) : payments.map(p => {
+                const ps = paymentStatus(p.pay_status);
+                return (
+                  <div key={p.id} className="flex items-center gap-4 px-6 py-4">
+                    {/* Status dot */}
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: ps.badge?.background ?? "#f3f4f6" }}>
+                      <CreditCard size={14} style={{ color: ps.badge?.color ?? "#9ca3af" }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium" style={{ color: "#1a2744" }}>{p.concept}</p>
+                      <p className="text-xs" style={{ color: "#9ca3af" }}>
+                        {p.due_date
+                          ? `Vence: ${new Date(p.due_date + "T12:00").toLocaleDateString("es-ES")}`
+                          : `Creado: ${new Date(p.created_at).toLocaleDateString("es-ES")}`}
+                        {p.paid_at && ` · Cobrado: ${new Date(p.paid_at).toLocaleDateString("es-ES")}`}
+                      </p>
+                    </div>
+                    <p className="text-sm font-bold flex-shrink-0" style={{ color: "#1a2744" }}>
+                      {Number(p.amount).toLocaleString("es-ES")} €
+                    </p>
+                    <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0" style={ps.badge}>
+                      {ps.icon} {ps.label}
+                    </span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => openEditPayment(p)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+                        title="Editar">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => setDeletePayTarget(p)}
+                        className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-gray-300 hover:text-red-500"
+                        title="Eliminar">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -672,6 +820,132 @@ export default function PacienteDetalle() {
                 disabled={deleting}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
                 style={{ background: "white", border: "1px solid #e5e0d8", color: "#6b7280" }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Payment create/edit modal ──────────────────────────────────────────── */}
+      {payModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={e => { if (e.target === e.currentTarget && !savingPay) setPayModal(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" style={{ border: "1px solid #e5e0d8" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#f3f0ea" }}>
+              <p className="font-semibold text-sm" style={{ color: "#1a2744" }}>
+                {payModal.mode === "create" ? "Nuevo pago" : "Editar pago"}
+              </p>
+              <button onClick={() => setPayModal(null)} disabled={savingPay}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                <X size={15} style={{ color: "#9ca3af" }} />
+              </button>
+            </div>
+            {/* Form */}
+            <form onSubmit={handleSavePayment} className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Concepto *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Ortodoncia mes 3, Implante…"
+                  value={payForm.concept}
+                  onChange={e => setPayForm(f => ({ ...f, concept: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+                  style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Importe (€) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={payForm.amount}
+                    onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                    className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+                    style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Vencimiento</label>
+                  <input
+                    type="date"
+                    value={payForm.due_date}
+                    onChange={e => setPayForm(f => ({ ...f, due_date: e.target.value }))}
+                    className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+                    style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                  />
+                </div>
+              </div>
+              {payModal.mode === "edit" && (
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#374151" }}>Estado</label>
+                  <select
+                    value={payForm.status}
+                    onChange={e => setPayForm(f => ({ ...f, status: e.target.value }))}
+                    className="w-full px-3 py-2.5 rounded-xl text-sm outline-none bg-white"
+                    style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="paid">Pagado</option>
+                    <option value="overdue">Vencido</option>
+                  </select>
+                </div>
+              )}
+              {payError && (
+                <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "#fef2f2", color: "#dc2626" }}>{payError}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={savingPay}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-60 transition-all"
+                  style={{ background: "linear-gradient(135deg, #1a2744, #243256)", color: "white" }}>
+                  {savingPay ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  {savingPay ? "Guardando…" : payModal.mode === "create" ? "Crear pago" : "Guardar cambios"}
+                </button>
+                <button type="button" onClick={() => setPayModal(null)} disabled={savingPay}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={{ border: "1px solid #e5e0d8", color: "#6b7280" }}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete payment confirmation ────────────────────────────────────────── */}
+      {deletePayTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={e => { if (e.target === e.currentTarget) setDeletePayTarget(null); }}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#fef2f2" }}>
+                <Trash2 size={18} style={{ color: "#dc2626" }} />
+              </div>
+              <div>
+                <p className="font-semibold text-sm" style={{ color: "#1a2744" }}>Eliminar pago</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Esta acción no se puede deshacer</p>
+              </div>
+            </div>
+            <p className="text-sm font-semibold mb-1 truncate" style={{ color: "#1a2744" }}>{deletePayTarget.concept}</p>
+            <p className="text-sm mb-5" style={{ color: "#9ca3af" }}>{Number(deletePayTarget.amount).toLocaleString("es-ES")} €</p>
+            <div className="flex gap-2">
+              <button onClick={confirmDeletePayment} disabled={deletingPay}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-60"
+                style={{ background: "#dc2626", color: "white" }}>
+                {deletingPay ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {deletingPay ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+              <button onClick={() => setDeletePayTarget(null)} disabled={deletingPay}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{ border: "1px solid #e5e0d8", color: "#6b7280" }}>
                 Cancelar
               </button>
             </div>
