@@ -2,14 +2,14 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   FileText, Image, Download, Eye, Search, CloudUpload,
-  Loader2, AlertCircle, CheckCircle, PenLine, FolderOpen, ExternalLink,
+  Loader2, AlertCircle, CheckCircle, PenLine, FolderOpen, ExternalLink, Trash2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { viewSignedPDF, downloadSignedPDF, printConsentForm } from "../../lib/pdfSigning";
 import {
   validateFile, staffUploadDocument, getDocumentUrl,
-  logAccess, formatFileSize, mimeToType,
+  logAccess, formatFileSize, mimeToType, deleteDocument,
 } from "../../lib/storage";
 
 const CATEGORIES = [
@@ -37,7 +37,7 @@ async function fetchPatientList() {
 
 // ─── Shared row components ────────────────────────────────────────────────────
 
-function DocRow({ doc, actionLoading, onOpen }) {
+function DocRow({ doc, actionLoading, onOpen, onDelete }) {
   const type      = mimeToType(doc.file_type);
   const isPDF     = type === "PDF";
   const isLoading = actionLoading === doc.id;
@@ -92,6 +92,11 @@ function DocRow({ doc, actionLoading, onOpen }) {
           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
           title="Descargar">
           <Download size={13} />
+        </button>
+        <button onClick={() => onDelete(doc)} disabled={isLoading}
+          className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-gray-300 hover:text-red-500 disabled:opacity-50"
+          title="Eliminar">
+          <Trash2 size={13} />
         </button>
       </div>
     </div>
@@ -197,6 +202,8 @@ export default function Documentos() {
   const [pendingFiles,  setPendingFiles]  = useState([]); // awaiting confirmation
   const [actionLoading, setActionLoading] = useState(null);
   const [pdfWorking,    setPdfWorking]    = useState(null);
+  const [deleteTarget,  setDeleteTarget]  = useState(null); // doc to confirm deletion
+  const [deleting,      setDeleting]      = useState(false);
 
   const fileRef  = useRef();
   const timerRef = useRef();
@@ -318,6 +325,21 @@ export default function Documentos() {
       console.error("[AdminDocumentos] open error:", err);
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  // ── Delete document ─────────────────────────────────────────────────────────
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteDocument(deleteTarget.file_path, deleteTarget.id);
+      setDocs(prev => prev.filter(d => d.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("[AdminDocumentos] delete error:", err);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -457,7 +479,7 @@ export default function Documentos() {
               </div>
             ) : (
               filteredDocs.map(doc => (
-                <DocRow key={doc.id} doc={doc} actionLoading={actionLoading} onOpen={openDoc} />
+                <DocRow key={doc.id} doc={doc} actionLoading={actionLoading} onOpen={openDoc} onDelete={setDeleteTarget} />
               ))
             )}
           </div>
@@ -642,6 +664,53 @@ export default function Documentos() {
               {uploadError}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Delete confirmation modal ──────────────────────────────────────────── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            style={{ border: "1px solid #e5e0d8" }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "#fef2f2" }}>
+                <Trash2 size={18} style={{ color: "#dc2626" }} />
+              </div>
+              <div>
+                <p className="font-semibold text-sm" style={{ color: "#1a2744" }}>Eliminar documento</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Esta acción no se puede deshacer</p>
+              </div>
+            </div>
+            <p className="text-sm mb-1" style={{ color: "#374151" }}>
+              Vas a eliminar permanentemente:
+            </p>
+            <p className="text-sm font-semibold mb-1 truncate" style={{ color: "#1a2744" }}>
+              {deleteTarget.name}
+            </p>
+            <p className="text-xs mb-5" style={{ color: "#9ca3af" }}>
+              Paciente: {deleteTarget.patient_name ?? "—"}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-60"
+                style={{ background: "#dc2626", color: "white" }}>
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {deleting ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{ background: "white", border: "1px solid #e5e0d8", color: "#6b7280" }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

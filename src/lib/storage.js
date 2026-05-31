@@ -90,12 +90,12 @@ export async function logAccess(documentId, action) {
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 export async function deleteDocument(filePath, documentId) {
+  if (documentId) {
+    const { error: dbErr } = await supabase.rpc('staff_delete_document', { p_document_id: documentId })
+    if (dbErr) throw dbErr
+  }
   const { error: storageErr } = await supabase.storage.from(BUCKET).remove([filePath])
   if (storageErr) throw storageErr
-  if (documentId) {
-    const { error } = await supabase.from('documents').delete().eq('id', documentId)
-    if (error) throw error
-  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
