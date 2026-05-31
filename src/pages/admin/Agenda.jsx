@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Plus, X, Loader2, AlertCircle, Save, EyeOff, Eye, Bell, CheckCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Loader2, AlertCircle, Save, EyeOff, Eye, Bell, CheckCircle, StickyNote } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { apptStatus } from "../../lib/statusStyles";
@@ -760,6 +760,15 @@ export default function Agenda() {
                         <p className="truncate" style={{ color: "#9ca3af" }}>
                           {(appt.treatment ?? "").split(" ").slice(0, 3).join(" ")}
                         </p>
+                        {/* Notes indicator */}
+                        {appt.notes && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <StickyNote size={9} style={{ color: "#c9a96e", flexShrink: 0 }} />
+                            <p className="truncate" style={{ color: "#c9a96e", fontSize: 9 }}>
+                              {appt.notes}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

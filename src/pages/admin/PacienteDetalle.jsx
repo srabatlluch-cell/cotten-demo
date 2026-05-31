@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download, CheckCircle, PenLine, Trash2 } from "lucide-react";
+import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download, CheckCircle, PenLine, Trash2, StickyNote, ChevronDown, ChevronUp, Save } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { getDocumentUrl, logAccess, formatFileSize, mimeToType, deleteDocument } from "../../lib/storage";
 import { viewSignedPDF, downloadSignedPDF, printConsentForm } from "../../lib/pdfSigning";
@@ -57,6 +57,9 @@ export default function PacienteDetalle() {
   const [pdfWorking,     setPdfWorking]     = useState(null); // { id, action }
   const [deleteTarget,   setDeleteTarget]   = useState(null); // doc pending deletion
   const [deleting,       setDeleting]       = useState(false);
+  const [expandedNotes,  setExpandedNotes]  = useState({}); // { [apptId]: boolean }
+  const [editingNotes,   setEditingNotes]   = useState({}); // { [apptId]: string }
+  const [savingNoteId,   setSavingNoteId]   = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +145,7 @@ export default function PacienteDetalle() {
         p_room:           appt.room ?? "",
         p_status:         newStatus,
         p_doctor_id:      appt.doctor_id ?? null,
+        p_notes:          appt.notes ?? null,
       });
       if (error) throw error;
 
@@ -179,6 +183,33 @@ export default function PacienteDetalle() {
       console.error("[PacienteDetalle] status change error:", err);
     } finally {
       setStatusChanging(null);
+    }
+  }
+
+  async function saveApptNotes(appt) {
+    const newNotes = editingNotes[appt.id] ?? appt.notes ?? "";
+    setSavingNoteId(appt.id);
+    try {
+      const { error } = await supabase.rpc("admin_update_appointment", {
+        p_appointment_id: appt.id,
+        p_date:           appt.date,
+        p_time:           String(appt.appointment_time).slice(0, 5),
+        p_treatment:      appt.treatment ?? "",
+        p_room:           appt.room ?? "",
+        p_status:         appt.appt_status,
+        p_doctor_id:      appt.doctor_id ?? null,
+        p_notes:          newNotes || null,
+      });
+      if (error) throw error;
+      setData(prev => ({
+        ...prev,
+        appts: prev.appts.map(a => a.id === appt.id ? { ...a, notes: newNotes || null } : a),
+      }));
+      setEditingNotes(prev => { const n = { ...prev }; delete n[appt.id]; return n; });
+    } catch (err) {
+      console.error("[PacienteDetalle] save notes error:", err);
+    } finally {
+      setSavingNoteId(null);
     }
   }
 
@@ -367,47 +398,105 @@ export default function PacienteDetalle() {
             {appts.length === 0 ? (
               <p className="px-6 py-8 text-sm text-center" style={{ color: "#9ca3af" }}>No hay citas registradas</p>
             ) : appts.map(a => {
-              const as = apptStatus(a.appt_status);
-              const isChanging = statusChanging === a.id;
+              const as          = apptStatus(a.appt_status);
+              const isChanging  = statusChanging === a.id;
+              const isExpanded  = !!expandedNotes[a.id];
+              const isEditingN  = a.id in editingNotes;
+              const isSavingN   = savingNoteId === a.id;
+              const currentNote = isEditingN ? editingNotes[a.id] : (a.notes ?? "");
+              const hasNotes    = !!a.notes;
+
               return (
-                <div key={a.id} className="flex items-center gap-4 px-6 py-4" style={as.card}>
-                  {/* Date chip */}
-                  <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
-                    style={{ background: as.dim ? "#f3f4f6" : "#1a274412", borderLeft: `3px solid ${as.borderColor}` }}>
-                    <span className="text-xs font-bold" style={{ color: "#1a2744" }}>
-                      {new Date(a.date + "T12:00").toLocaleDateString("es-ES", { day: "2-digit" })}
-                    </span>
-                    <span className="text-xs uppercase" style={{ color: "#c9a96e" }}>
-                      {new Date(a.date + "T12:00").toLocaleDateString("es-ES", { month: "short" })}
-                    </span>
-                  </div>
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium" style={{ color: "#1a2744", textDecoration: as.strike ? "line-through" : "none" }}>{a.treatment || "Consulta"}</p>
-                    <p className="text-xs" style={{ color: "#9ca3af" }}>
-                      {[String(a.appointment_time).slice(0, 5) + "h", a.doctor_name, a.room].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  {/* Status selector */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {isChanging ? (
-                      <Loader2 size={14} className="animate-spin" style={{ color: "#9ca3af" }} />
-                    ) : (
-                      <select
-                        value={a.appt_status}
-                        onChange={e => changeApptStatus(a, e.target.value)}
-                        className="text-xs rounded-lg px-2 py-1.5 outline-none bg-white cursor-pointer"
-                        style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                <div key={a.id} className="border-b last:border-0" style={{ borderColor: "#f3f0ea" }}>
+                  {/* Main row */}
+                  <div className="flex items-center gap-4 px-6 py-4" style={as.card}>
+                    {/* Date chip */}
+                    <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+                      style={{ background: as.dim ? "#f3f4f6" : "#1a274412", borderLeft: `3px solid ${as.borderColor}` }}>
+                      <span className="text-xs font-bold" style={{ color: "#1a2744" }}>
+                        {new Date(a.date + "T12:00").toLocaleDateString("es-ES", { day: "2-digit" })}
+                      </span>
+                      <span className="text-xs uppercase" style={{ color: "#c9a96e" }}>
+                        {new Date(a.date + "T12:00").toLocaleDateString("es-ES", { month: "short" })}
+                      </span>
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium" style={{ color: "#1a2744", textDecoration: as.strike ? "line-through" : "none" }}>{a.treatment || "Consulta"}</p>
+                      <p className="text-xs" style={{ color: "#9ca3af" }}>
+                        {[String(a.appointment_time).slice(0, 5) + "h", a.doctor_name, a.room].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    {/* Notes toggle + status */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => setExpandedNotes(prev => ({ ...prev, [a.id]: !prev[a.id] }))}
+                        className="p-1.5 rounded-lg transition-colors"
+                        style={hasNotes || isExpanded
+                          ? { background: "#fef9ec", color: "#c9a96e" }
+                          : { color: "#d1d5db" }}
+                        title={hasNotes ? "Ver/editar notas" : "Añadir nota"}
                       >
-                        {APPT_STATUS_OPTIONS.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    )}
-                    <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold" style={as.badge}>
-                      {as.icon} {as.label}
-                    </span>
+                        <StickyNote size={14} />
+                      </button>
+                      {isChanging ? (
+                        <Loader2 size={14} className="animate-spin" style={{ color: "#9ca3af" }} />
+                      ) : (
+                        <select
+                          value={a.appt_status}
+                          onChange={e => changeApptStatus(a, e.target.value)}
+                          className="text-xs rounded-lg px-2 py-1.5 outline-none bg-white cursor-pointer"
+                          style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                        >
+                          {APPT_STATUS_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      )}
+                      <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold" style={as.badge}>
+                        {as.icon} {as.label}
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Notes panel */}
+                  {isExpanded && (
+                    <div className="px-6 pb-4" style={{ background: "#fffdf7" }}>
+                      <p className="text-xs font-medium mb-2 flex items-center gap-1.5" style={{ color: "#c9a96e" }}>
+                        <StickyNote size={11} /> Observaciones internas
+                        <span className="px-1.5 py-0.5 rounded-full" style={{ background: "#f3f0ea", color: "#9ca3af", fontSize: "0.6rem" }}>Solo personal</span>
+                      </p>
+                      <textarea
+                        rows={3}
+                        value={currentNote}
+                        onChange={e => setEditingNotes(prev => ({ ...prev, [a.id]: e.target.value }))}
+                        placeholder="Añadir observaciones internas sobre esta cita…"
+                        className="w-full text-sm rounded-xl px-3 py-2.5 outline-none resize-none bg-white"
+                        style={{ border: "1px solid #e5e0d8", color: "#374151" }}
+                      />
+                      {isEditingN && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => saveApptNotes(a)}
+                            disabled={isSavingN}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
+                            style={{ background: "linear-gradient(135deg, #1a2744, #243256)", color: "white" }}
+                          >
+                            {isSavingN ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                            {isSavingN ? "Guardando…" : "Guardar nota"}
+                          </button>
+                          <button
+                            onClick={() => setEditingNotes(prev => { const n = { ...prev }; delete n[a.id]; return n; })}
+                            disabled={isSavingN}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                            style={{ border: "1px solid #e5e0d8", color: "#6b7280" }}
+                          >
+                            Descartar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
