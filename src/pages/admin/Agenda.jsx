@@ -330,6 +330,10 @@ export default function Agenda() {
   // Cancelled visibility toggle
   const [hideCancelled, setHideCancelled] = useState(false);
 
+  // Filters
+  const [filterDoctor, setFilterDoctor] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
   // ── load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
@@ -377,8 +381,21 @@ export default function Agenda() {
 
   function apptsByDay(dateStr) {
     return appts
-      .filter(a => a.date === dateStr && !(hideCancelled && a.appt_status === "cancelled"))
+      .filter(a => {
+        if (a.date !== dateStr) return false;
+        if (hideCancelled && a.appt_status === "cancelled") return false;
+        if (filterDoctor && a.doctor_id !== filterDoctor) return false;
+        if (filterStatus && a.appt_status !== filterStatus) return false;
+        return true;
+      })
       .sort((a, b) => (a.appointment_time ?? "").localeCompare(b.appointment_time ?? ""));
+  }
+
+  const activeFilters = (filterDoctor ? 1 : 0) + (filterStatus ? 1 : 0);
+
+  function clearFilters() {
+    setFilterDoctor("");
+    setFilterStatus("");
   }
 
   // ── create appointment ───────────────────────────────────────────────────────
@@ -662,6 +679,52 @@ export default function Agenda() {
             Nueva cita
           </button>
         </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <select
+          value={filterDoctor}
+          onChange={e => setFilterDoctor(e.target.value)}
+          className="px-3 py-2 rounded-xl text-xs outline-none bg-white"
+          style={{
+            border: filterDoctor ? "1px solid #c9a96e" : "1px solid #e5e0d8",
+            color: filterDoctor ? "#1a2744" : "#9ca3af",
+            fontWeight: filterDoctor ? 600 : 400,
+          }}
+        >
+          <option value="">Todos los doctores</option>
+          {doctors.map(d => (
+            <option key={d.id} value={d.id}>{d.full_name}</option>
+          ))}
+        </select>
+
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          className="px-3 py-2 rounded-xl text-xs outline-none bg-white"
+          style={{
+            border: filterStatus ? "1px solid #c9a96e" : "1px solid #e5e0d8",
+            color: filterStatus ? "#1a2744" : "#9ca3af",
+            fontWeight: filterStatus ? 600 : 400,
+          }}
+        >
+          <option value="">Todos los estados</option>
+          {STATUS_OPTIONS.map(s => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+
+        {activeFilters > 0 && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+            style={{ background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}
+          >
+            <X size={12} />
+            Limpiar filtros ({activeFilters})
+          </button>
+        )}
       </div>
 
       {/* Week nav */}
