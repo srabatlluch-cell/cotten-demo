@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download, CheckCircle, PenLine } from "lucide-react";
+import { ArrowLeft, User, FileText, CreditCard, Calendar, Loader2, Eye, Download, CheckCircle, PenLine, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { getDocumentUrl, logAccess, formatFileSize, mimeToType } from "../../lib/storage";
+import { getDocumentUrl, logAccess, formatFileSize, mimeToType, deleteDocument } from "../../lib/storage";
 import { viewSignedPDF, downloadSignedPDF, printConsentForm } from "../../lib/pdfSigning";
 import { apptStatus, patientStatus, paymentStatus } from "../../lib/statusStyles";
 import {
@@ -55,6 +55,8 @@ export default function PacienteDetalle() {
   const [actionLoading,  setActionLoading]  = useState(null);
   const [statusChanging, setStatusChanging] = useState(null); // appointment id being updated
   const [pdfWorking,     setPdfWorking]     = useState(null); // { id, action }
+  const [deleteTarget,   setDeleteTarget]   = useState(null); // doc pending deletion
+  const [deleting,       setDeleting]       = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +113,20 @@ export default function PacienteDetalle() {
       console.error("[PacienteDetalle] open doc error:", err);
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteDocument(deleteTarget.file_path, deleteTarget.id);
+      setData(prev => ({ ...prev, docs: prev.docs.filter(d => d.id !== deleteTarget.id) }));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("[PacienteDetalle] delete error:", err);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -441,6 +457,11 @@ export default function PacienteDetalle() {
                         title="Descargar">
                         <Download size={14} />
                       </button>
+                      <button onClick={() => setDeleteTarget(d)} disabled={isLoading}
+                        className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-gray-300 hover:text-red-500 disabled:opacity-50"
+                        title="Eliminar">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                 );
@@ -525,6 +546,46 @@ export default function PacienteDetalle() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirmation modal ──────────────────────────────────────────── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            style={{ border: "1px solid #e5e0d8" }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "#fef2f2" }}>
+                <Trash2 size={18} style={{ color: "#dc2626" }} />
+              </div>
+              <div>
+                <p className="font-semibold text-sm" style={{ color: "#1a2744" }}>Eliminar documento</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Esta acción no se puede deshacer</p>
+              </div>
+            </div>
+            <p className="text-sm mb-1" style={{ color: "#374151" }}>Vas a eliminar permanentemente:</p>
+            <p className="text-sm font-semibold mb-5 truncate" style={{ color: "#1a2744" }}>{deleteTarget.name}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-60"
+                style={{ background: "#dc2626", color: "white" }}>
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {deleting ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{ background: "white", border: "1px solid #e5e0d8", color: "#6b7280" }}>
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
