@@ -23,6 +23,234 @@ async function loadPanel() {
   };
 }
 
+// ─── chart helpers ────────────────────────────────────────────────────────────
+
+function ChartEmpty({ message = "Sin datos disponibles" }) {
+  return (
+    <div className="flex items-center justify-center py-10">
+      <p className="text-xs" style={{ color: "#c4bdb0" }}>{message}</p>
+    </div>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="flex items-center justify-center py-10">
+      <Loader2 size={16} className="animate-spin" style={{ color: "#d9d3ca" }} />
+    </div>
+  );
+}
+
+// SVG chart viewport constants — viewBox "0 0 380 160"
+// inner drawing area: x[36..368] y[20..124]
+const _W = 380, _H = 160, _PL = 36, _PR = 12, _PT = 20, _PB = 36;
+const _IW = _W - _PL - _PR;   // 332
+const _IH = _H - _PT - _PB;   // 104
+
+// ─── Bar chart ───────────────────────────────────────────────────────────────
+
+function BarChart({ data }) {
+  if (!data?.length) return <ChartEmpty />;
+  const max = Math.max(...data.map(d => d.value), 1);
+  const slotW = _IW / data.length;
+  const bw = Math.max(slotW * 0.52, 6);
+
+  return (
+    <svg viewBox={`0 0 ${_W} ${_H}`} className="w-full" style={{ overflow: "visible" }}>
+      <defs>
+        <linearGradient id="__bcGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#c9a96e" />
+          <stop offset="100%" stopColor="#c9a96e" stopOpacity="0.4" />
+        </linearGradient>
+      </defs>
+
+      {/* horizontal guide lines + Y labels */}
+      {[0, 0.5, 1].map(t => {
+        const gy = _PT + _IH * (1 - t);
+        return (
+          <g key={t}>
+            <line x1={_PL} y1={gy} x2={_W - _PR} y2={gy}
+              stroke={t === 0 ? "#e5e0d8" : "#f3f0ea"} strokeWidth={1} />
+            <text x={_PL - 5} y={gy + 3.5} textAnchor="end" fontSize={9} fill="#c4bdb0">
+              {Math.round(max * t)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* bars + X labels */}
+      {data.map((d, i) => {
+        const bh = Math.max((d.value / max) * _IH, d.value > 0 ? 4 : 0);
+        const sx = _PL + i * slotW;
+        const bx = sx + (slotW - bw) / 2;
+        const by = _PT + _IH - bh;
+        return (
+          <g key={i}>
+            <rect x={bx} y={bh > 0 ? by : _PT + _IH - 2} width={bw}
+              height={bh > 0 ? bh : 2} rx={4}
+              fill={bh > 0 ? "url(#__bcGrad)" : "#f3f0ea"} />
+            {d.value > 0 && (
+              <text x={bx + bw / 2} y={by - 5} textAnchor="middle"
+                fontSize={9} fill="#c9a96e" fontWeight="700">{d.value}</text>
+            )}
+            <text x={sx + slotW / 2} y={_H - 4} textAnchor="middle"
+              fontSize={9} fill="#b0a898">{d.label}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ─── Area / line chart ────────────────────────────────────────────────────────
+
+function AreaChart({ data }) {
+  if (!data?.length) return <ChartEmpty />;
+  const color = "#1a2744";
+  const max = Math.max(...data.map(d => d.value), 1);
+  const n = data.length;
+
+  const pts = data.map((d, i) => ({
+    x: _PL + (n < 2 ? _IW / 2 : (i / (n - 1)) * _IW),
+    y: _PT + _IH - (d.value / max) * _IH,
+    v: d.value,
+    l: d.label,
+  }));
+
+  // Smooth cubic bezier — control points at horizontal midpoints
+  const lineSeg = pts.reduce((acc, p, i) => {
+    if (i === 0) return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+    const prev = pts[i - 1];
+    const mx = ((prev.x + p.x) / 2).toFixed(1);
+    return `${acc} C ${mx} ${prev.y.toFixed(1)} ${mx} ${p.y.toFixed(1)} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  }, "");
+
+  const base = _PT + _IH;
+  const areaPath = n > 1
+    ? `${lineSeg} L ${pts[n - 1].x.toFixed(1)} ${base} L ${pts[0].x.toFixed(1)} ${base} Z`
+    : "";
+
+  return (
+    <svg viewBox={`0 0 ${_W} ${_H}`} className="w-full" style={{ overflow: "visible" }}>
+      <defs>
+        <linearGradient id="__acGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={color} stopOpacity="0.1" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* guide lines + Y labels */}
+      {[0, 0.5, 1].map(t => {
+        const gy = _PT + _IH * (1 - t);
+        return (
+          <g key={t}>
+            <line x1={_PL} y1={gy} x2={_W - _PR} y2={gy}
+              stroke={t === 0 ? "#e5e0d8" : "#f3f0ea"} strokeWidth={1} />
+            <text x={_PL - 5} y={gy + 3.5} textAnchor="end" fontSize={9} fill="#c4bdb0">
+              {Math.round(max * t)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* area fill + line */}
+      {n > 1 && <path d={areaPath} fill="url(#__acGrad)" />}
+      {n > 1 && (
+        <path d={lineSeg} fill="none" stroke={color} strokeWidth={2}
+          strokeLinecap="round" strokeLinejoin="round" />
+      )}
+
+      {/* data points + labels */}
+      {pts.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r={3.5} fill="white" stroke={color} strokeWidth={2} />
+          {p.v > 0 && (
+            <text x={p.x} y={p.y - 8} textAnchor="middle"
+              fontSize={9} fill={color} fontWeight="700">{p.v}</text>
+          )}
+          <text x={p.x} y={_H - 4} textAnchor="middle" fontSize={9} fill="#b0a898">{p.l}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// ─── Donut chart ──────────────────────────────────────────────────────────────
+
+function DonutChart({ segments, totalAmount }) {
+  const total = segments.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return <ChartEmpty message="Sin pagos registrados" />;
+
+  const CX = 72, CY = 76, OR = 54, IR = 32;
+  const GAP = 0.05;
+  let angle = -Math.PI / 2;
+
+  const arcs = segments.filter(s => s.value > 0).map(seg => {
+    const sweep = (seg.value / total) * 2 * Math.PI - GAP;
+    const sa = angle + GAP / 2;
+    const ea = sa + Math.max(sweep, 0.001);
+    const lg = sweep > Math.PI ? 1 : 0;
+    const [c1, s1] = [Math.cos(sa), Math.sin(sa)];
+    const [c2, s2] = [Math.cos(ea), Math.sin(ea)];
+    const path = [
+      `M ${(CX + OR * c1).toFixed(2)} ${(CY + OR * s1).toFixed(2)}`,
+      `A ${OR} ${OR} 0 ${lg} 1 ${(CX + OR * c2).toFixed(2)} ${(CY + OR * s2).toFixed(2)}`,
+      `L ${(CX + IR * c2).toFixed(2)} ${(CY + IR * s2).toFixed(2)}`,
+      `A ${IR} ${IR} 0 ${lg} 0 ${(CX + IR * c1).toFixed(2)} ${(CY + IR * s1).toFixed(2)}`,
+      "Z",
+    ].join(" ");
+    angle += (seg.value / total) * 2 * Math.PI;
+    return { ...seg, path };
+  });
+
+  return (
+    <div className="flex items-center gap-5">
+      {/* donut */}
+      <svg viewBox="0 0 148 152" style={{ width: 124, flexShrink: 0 }}>
+        {arcs.map((a, i) => <path key={i} d={a.path} fill={a.color} />)}
+        <text x={CX} y={CY - 5} textAnchor="middle" fontSize={20} fontWeight="800" fill="#1a2744">{total}</text>
+        <text x={CX} y={CY + 11} textAnchor="middle" fontSize={8.5} fill="#9ca3af">pagos totales</text>
+      </svg>
+
+      {/* legend + progress bars */}
+      <div className="flex flex-col gap-3.5 flex-1 min-w-0">
+        {segments.map((s, i) => {
+          const pct = Math.round((s.value / total) * 100);
+          return (
+            <div key={i}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                  <span className="text-xs" style={{ color: "#374151" }}>{s.label}</span>
+                </div>
+                <span className="text-xs" style={{ color: "#1a2744" }}>
+                  <strong>{s.value}</strong>
+                  <span style={{ color: "#9ca3af", fontWeight: 400 }}> ({pct}%)</span>
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#f3f0ea" }}>
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
+              </div>
+            </div>
+          );
+        })}
+        {totalAmount > 0 && (
+          <div className="pt-2.5 border-t" style={{ borderColor: "#f3f0ea" }}>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs" style={{ color: "#9ca3af" }}>Total facturado</span>
+              <span className="text-xs font-bold" style={{ color: "#1a2744" }}>
+                {totalAmount.toLocaleString("es-ES")} €
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── main component ───────────────────────────────────────────────────────────
+
 export default function Panel() {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
@@ -71,6 +299,34 @@ export default function Panel() {
     return () => { cancelled = true; };
   }, []);
 
+  // ── chart data (loads independently so KPI cards are not blocked) ───────────
+  const [chartData,     setChartData]     = useState(null);
+  const [chartsLoading, setChartsLoading] = useState(true);
+
+  useEffect(() => {
+    let skip = false;
+    (async () => {
+      setChartsLoading(true);
+      try {
+        const [apptRes, patRes, payRes] = await Promise.all([
+          supabase.rpc("get_monthly_appointments", { p_months: 6 }),
+          supabase.rpc("get_monthly_new_patients",  { p_months: 6 }),
+          supabase.rpc("get_payment_distribution"),
+        ]);
+        if (!skip) setChartData({
+          appointments: apptRes.data ?? [],
+          patients:     patRes.data  ?? [],
+          payments:     payRes.data  ?? [],
+        });
+      } catch (err) {
+        console.error("[Panel] charts error:", err);
+      } finally {
+        if (!skip) setChartsLoading(false);
+      }
+    })();
+    return () => { skip = true; };
+  }, []);
+
   async function handleCancelAppt(appt) {
     setCancelPending(null);
     setCanceling(appt.id);
@@ -113,6 +369,40 @@ export default function Panel() {
       setCanceling(null);
     }
   }
+
+  // ── chart data transforms ────────────────────────────────────────────────────
+  function monthLabel(ds) {
+    if (!ds) return "";
+    return new Date(ds + "T12:00")
+      .toLocaleDateString("es-ES", { month: "short" })
+      .replace(".", "")
+      .toUpperCase()
+      .slice(0, 3);
+  }
+
+  const monthlyAppts = (chartData?.appointments ?? []).map(r => ({
+    label: monthLabel(r.month_date),
+    value: Number(r.total),
+  }));
+
+  const monthlyPatients = (chartData?.patients ?? []).map(r => ({
+    label: monthLabel(r.month_date),
+    value: Number(r.total),
+  }));
+
+  const PAY_META = {
+    paid:    { label: "Cobrado",   color: "#059669" },
+    pending: { label: "Pendiente", color: "#d97706" },
+    overdue: { label: "Vencido",   color: "#dc2626" },
+  };
+  const payDist = chartData?.payments ?? [];
+  const paySegments = ["paid", "pending", "overdue"].map(st => ({
+    label:  PAY_META[st].label,
+    color:  PAY_META[st].color,
+    value:  Number(payDist.find(r => r.pay_status === st)?.total_count  ?? 0),
+    amount: Number(payDist.find(r => r.pay_status === st)?.total_amount ?? 0),
+  }));
+  const totalPayAmount = paySegments.reduce((s, seg) => s + seg.amount, 0);
 
   const stats  = data?.stats  ?? {};
   const today  = data?.today  ?? [];
@@ -381,6 +671,62 @@ export default function Panel() {
               })
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ── Statistics section ───────────────────────────────────────────────── */}
+      <div className="mt-10">
+
+        <div className="mb-6 pb-4 border-b" style={{ borderColor: "#e5e0d8" }}>
+          <h2 className="text-base font-semibold" style={{ color: "#1a2744" }}>Estadísticas</h2>
+          <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Actividad de los últimos 6 meses</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* Citas completadas — bar chart */}
+          <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "#1a2744" }}>Citas completadas</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Excluye canceladas y no presentados</p>
+              </div>
+              {!chartsLoading && (
+                <span className="text-xl font-bold tabular-nums" style={{ color: "#c9a96e" }}>
+                  {monthlyAppts.reduce((s, d) => s + d.value, 0)}
+                </span>
+              )}
+            </div>
+            {chartsLoading ? <ChartSkeleton /> : <BarChart data={monthlyAppts} />}
+          </div>
+
+          {/* Nuevos pacientes — area chart */}
+          <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "#1a2744" }}>Nuevos pacientes</p>
+                <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Registros mensuales en la clínica</p>
+              </div>
+              {!chartsLoading && (
+                <span className="text-xl font-bold tabular-nums" style={{ color: "#1a2744" }}>
+                  {monthlyPatients.reduce((s, d) => s + d.value, 0)}
+                </span>
+              )}
+            </div>
+            {chartsLoading ? <ChartSkeleton /> : <AreaChart data={monthlyPatients} />}
+          </div>
+
+          {/* Estado de pagos — donut chart */}
+          <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e0d8" }}>
+            <div className="mb-5">
+              <p className="text-sm font-semibold" style={{ color: "#1a2744" }}>Estado de pagos</p>
+              <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Distribución por estado actual</p>
+            </div>
+            {chartsLoading
+              ? <ChartSkeleton />
+              : <DonutChart segments={paySegments} totalAmount={totalPayAmount} />}
+          </div>
+
         </div>
       </div>
     </div>
